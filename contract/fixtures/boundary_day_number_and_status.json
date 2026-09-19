@@ -1,0 +1,37 @@
+{
+  "id": "boundary_day_number_and_status",
+  "rules": ["R1", "R2", "R4"],
+  "description": "At 00:30 with a 04:00 boundary, effective_today, day_number, and commitment_statuses must all resolve to the previous calendar date, not just effective_today.",
+  "now": "2026-01-10T00:30:00",
+  "arc": {
+    "id": "arc-1",
+    "name": "Boundary Arc",
+    "start_date": "2026-01-01",
+    "end_date": "2026-01-30",
+    "status": "active",
+    "strictness": "chill",
+    "rest_tokens_per_week": 0,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+  "commitments": [
+    {
+      "id": "c-gym",
+      "name": "Gym",
+      "type": "binary",
+      "is_required": true,
+      "schedule_type": "daily",
+      "active_from": "2026-01-01"
+    }
+  ],
+  "days": [
+    { "date": "2026-01-09", "entries": { "c-gym": 1 } }
+  ],
+  "expect": {
+    "effective_today": "2026-01-09",
+    "day_number": 9,
+    "commitment_statuses": {
+      "2026-01-09": { "c-gym": "done" }
+    }
+  }
+}

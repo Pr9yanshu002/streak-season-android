@@ -1,0 +1,51 @@
+{
+  "id": "pct_excludes_unscheduled_days",
+  "rules": ["R3", "R5", "R8"],
+  "description": "A weekdays-only arc must not be inflated by free weekends. Sat/Sun resolve to complete (no required scheduled) but are excluded from the percentage denominator.",
+  "now": "2026-01-19T20:00:00",
+  "arc": {
+    "id": "arc-1",
+    "name": "Weekday Focus",
+    "start_date": "2026-01-12",
+    "end_date": "2026-02-12",
+    "status": "active",
+    "strictness": "chill",
+    "rest_tokens_per_week": 0,
+    "backfill_days": 7,
+    "day_boundary_hour": 4
+  },
+  "commitments": [
+    {
+      "id": "c-deepwork",
+      "name": "Deep work",
+      "type": "duration",
+      "target_value": 90,
+      "unit": "minutes",
+      "is_required": true,
+      "schedule_type": "weekdays",
+      "schedule_days": "1,2,3,4,5",
+      "active_from": "2026-01-12"
+    }
+  ],
+  "days": [
+    { "date": "2026-01-12", "entries": { "c-deepwork": 120 } },
+    { "date": "2026-01-13", "entries": { "c-deepwork": 90 } },
+    { "date": "2026-01-14", "entries": { "c-deepwork": 30 } },
+    { "date": "2026-01-15", "entries": { "c-deepwork": 95 } },
+    { "date": "2026-01-16", "entries": { "c-deepwork": 100 } }
+  ],
+  "expect": {
+    "day_states": {
+      "2026-01-12": "complete",
+      "2026-01-13": "complete",
+      "2026-01-14": "missed",
+      "2026-01-15": "complete",
+      "2026-01-16": "complete",
+      "2026-01-17": "complete",
+      "2026-01-18": "complete",
+      "2026-01-19": "pending"
+    },
+    "completion_pct": 0.8,
+    "note": "Denominator is the 5 scheduled weekdays only. Sat 17 and Sun 18 are complete-by-vacancy and excluded; Mon 19 is pending and excluded."
+  }
+}

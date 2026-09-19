@@ -1,0 +1,37 @@
+{
+  "id": "edge_clock_jumps_backwards",
+  "rules": ["R5", "R14"],
+  "description": "If the clock jumps backwards past a date that was already logged, the engine doesn't special-case it — a date after the (rolled-back) today still resolves to future, entry or not.",
+  "now": "2026-01-15T10:00:00",
+  "arc": {
+    "id": "arc-1",
+    "name": "Clock Jump Arc",
+    "start_date": "2026-01-10",
+    "end_date": "2026-02-10",
+    "status": "active",
+    "strictness": "chill",
+    "rest_tokens_per_week": 0,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+  "commitments": [
+    {
+      "id": "c-gym",
+      "name": "Gym",
+      "type": "binary",
+      "is_required": true,
+      "schedule_type": "daily",
+      "active_from": "2026-01-10"
+    }
+  ],
+  "days": [
+    { "date": "2026-01-20", "entries": { "c-gym": 1 } }
+  ],
+  "expect": {
+    "effective_today": "2026-01-15",
+    "day_states": {
+      "2026-01-15": "pending",
+      "2026-01-20": "future"
+    }
+  }
+}

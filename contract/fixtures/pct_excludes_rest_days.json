@@ -1,0 +1,42 @@
+{
+  "id": "pct_excludes_rest_days",
+  "rules": ["R6", "R8"],
+  "description": "A day resolved as rest counts toward neither the numerator nor the denominator of completion percentage.",
+  "now": "2026-01-18T10:00:00",
+  "arc": {
+    "id": "arc-1",
+    "name": "Rest Days Arc",
+    "start_date": "2026-01-12",
+    "end_date": "2026-01-17",
+    "status": "active",
+    "strictness": "standard",
+    "rest_tokens_per_week": 1,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+  "commitments": [
+    {
+      "id": "c-gym",
+      "name": "Gym",
+      "type": "binary",
+      "is_required": true,
+      "schedule_type": "daily",
+      "active_from": "2026-01-12"
+    }
+  ],
+  "days": [
+    { "date": "2026-01-12", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-13", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-14", "entries": {}, "rest_token_used": true },
+    { "date": "2026-01-15", "entries": {} },
+    { "date": "2026-01-16", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-17", "entries": { "c-gym": 1 } }
+  ],
+  "expect": {
+    "day_states": {
+      "2026-01-14": "rest",
+      "2026-01-15": "missed"
+    },
+    "completion_pct": 0.8
+  }
+}

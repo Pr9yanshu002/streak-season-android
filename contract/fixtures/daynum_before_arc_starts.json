@@ -1,0 +1,23 @@
+{
+  "id": "daynum_before_arc_starts",
+  "rules": ["R2"],
+  "description": "day_number is 0 before the arc's start_date — elapsedDates is empty.",
+  "now": "2026-01-15T10:00:00",
+  "arc": {
+    "id": "arc-1",
+    "name": "Future Arc",
+    "start_date": "2026-02-01",
+    "end_date": "2026-02-28",
+    "status": "active",
+    "strictness": "chill",
+    "rest_tokens_per_week": 0,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+  "commitments": [],
+  "days": [],
+  "expect": {
+    "day_number": 0,
+    "total_days": 28
+  }
+}

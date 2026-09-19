@@ -1,0 +1,23 @@
+*.iml
+.gradle
+/local.properties
+/.idea/
+.DS_Store
+/build
+/.kotlin
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+# Module build outputs
+/*/build
+
+# Keystores and signing
+*.jks
+*.keystore
+keystore.properties
+
+# Environment
+.env
+.env.*
+

@@ -1,0 +1,45 @@
+{
+  "id": "state_complete_all_required",
+  "rules": ["R5"],
+  "description": "A day resolves to complete only once every required commitment scheduled that day is satisfied.",
+  "now": "2026-01-17T10:00:00",
+  "arc": {
+    "id": "arc-1",
+    "name": "Two Commitments",
+    "start_date": "2026-01-10",
+    "end_date": "2026-02-10",
+    "status": "active",
+    "strictness": "chill",
+    "rest_tokens_per_week": 0,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+  "commitments": [
+    {
+      "id": "c-gym",
+      "name": "Gym",
+      "type": "binary",
+      "is_required": true,
+      "schedule_type": "daily",
+      "active_from": "2026-01-10"
+    },
+    {
+      "id": "c-water",
+      "name": "Water",
+      "type": "counter",
+      "target_value": 3,
+      "unit": "litres",
+      "is_required": true,
+      "schedule_type": "daily",
+      "active_from": "2026-01-10"
+    }
+  ],
+  "days": [
+    { "date": "2026-01-15", "entries": { "c-gym": 1, "c-water": 3 } }
+  ],
+  "expect": {
+    "day_states": {
+      "2026-01-15": "complete"
+    }
+  }
+}

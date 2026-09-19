@@ -1,0 +1,23 @@
+{
+  "id": "daynum_first_day_of_arc",
+  "rules": ["R2"],
+  "description": "day_number is 1 on the arc's own start_date.",
+  "now": "2026-01-01T10:00:00",
+  "arc": {
+    "id": "arc-1",
+    "name": "Day Number Arc",
+    "start_date": "2026-01-01",
+    "end_date": "2026-01-30",
+    "status": "active",
+    "strictness": "chill",
+    "rest_tokens_per_week": 0,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+  "commitments": [],
+  "days": [],
+  "expect": {
+    "day_number": 1,
+    "total_days": 30
+  }
+}

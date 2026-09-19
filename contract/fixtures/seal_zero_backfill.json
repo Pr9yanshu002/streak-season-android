@@ -1,0 +1,37 @@
+{
+  "id": "seal_zero_backfill",
+  "rules": ["R7"],
+  "description": "With backfill_days set to 0, only today remains editable — every prior date seals immediately at rollover.",
+  "now": "2026-01-15T10:00:00",
+  "arc": {
+    "id": "arc-1",
+    "name": "No Backfill Arc",
+    "start_date": "2026-01-10",
+    "end_date": "2026-02-10",
+    "status": "active",
+    "strictness": "chill",
+    "rest_tokens_per_week": 0,
+    "backfill_days": 0,
+    "day_boundary_hour": 4
+  },
+  "commitments": [
+    {
+      "id": "c-gym",
+      "name": "Gym",
+      "type": "binary",
+      "is_required": true,
+      "schedule_type": "daily",
+      "active_from": "2026-01-10"
+    }
+  ],
+  "days": [],
+  "expect": {
+    "sealed_dates": [
+      "2026-01-10",
+      "2026-01-11",
+      "2026-01-12",
+      "2026-01-13",
+      "2026-01-14"
+    ]
+  }
+}

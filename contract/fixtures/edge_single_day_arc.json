@@ -1,0 +1,36 @@
+{
+  "id": "edge_single_day_arc",
+  "rules": ["R2", "R10", "R11"],
+  "description": "A single-day arc (start equals end) still resolves normally — one elapsed day, a best streak of at most 1, and it completes the day after.",
+  "now": "2026-01-11T10:00:00",
+  "arc": {
+    "id": "arc-1",
+    "name": "One Day Arc",
+    "start_date": "2026-01-10",
+    "end_date": "2026-01-10",
+    "status": "active",
+    "strictness": "chill",
+    "rest_tokens_per_week": 0,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+  "commitments": [
+    {
+      "id": "c-gym",
+      "name": "Gym",
+      "type": "binary",
+      "is_required": true,
+      "schedule_type": "daily",
+      "active_from": "2026-01-10"
+    }
+  ],
+  "days": [
+    { "date": "2026-01-10", "entries": { "c-gym": 1 } }
+  ],
+  "expect": {
+    "day_states": { "2026-01-10": "complete" },
+    "best_streak": 1,
+    "arc_status": "completed",
+    "failed_on_date": null
+  }
+}

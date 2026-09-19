@@ -1,0 +1,381 @@
+package dev.priyanshu.arc.ui.today
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import dev.priyanshu.arc.domain.model.CommitmentType
+import dev.priyanshu.arc.domain.model.DayState
+import dev.priyanshu.arc.ui.theme.StreakSeasonTheme
+import java.time.LocalDate
+import org.koin.androidx.compose.koinViewModel
+
+@Composable
+fun TodayRoute(
+    viewModel: TodayViewModel = koinViewModel(),
+    onCreateArc: () -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
+    val state by viewModel.state.collectAsState()
+    TodayScreen(
+        state = state,
+        onToggleBinary = viewModel::completeBinary,
+        onCounterChange = viewModel::setCounterValue,
+        onDurationChange = viewModel::setDurationValue,
+        onLogChange = viewModel::recordLog,
+        onUndo = viewModel::undo,
+        onCreateArc = onCreateArc,
+        modifier = modifier,
+    )
+}
+
+@Composable
+fun TodayScreen(
+    state: TodayUiState,
+    onToggleBinary: (commitmentId: String, done: Boolean) -> Unit,
+    onCounterChange: (commitmentId: String, value: Double) -> Unit,
+    onDurationChange: (commitmentId: String, value: Double) -> Unit,
+    onLogChange: (commitmentId: String, value: Double) -> Unit,
+    onUndo: (commitmentId: String) -> Unit,
+    onCreateArc: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    when (state) {
+        is TodayUiState.Loading ->
+            Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+
+        // Covers both "no arc has ever existed" and "an arc exists but none
+        // is active" (completed/failed/archived) — getActiveArcId() only
+        // ever matches status = 'active', so both cases already collapse
+        // into this one state; no separate state needed for the second.
+        is TodayUiState.NoActiveArc ->
+            Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text(
+                        "An arc is a time-boxed chapter with daily commitments and a rule set. " +
+                            "Start one to see it here.",
+                        textAlign = TextAlign.Center,
+                    )
+                    Button(onClick = onCreateArc) { Text("Start an arc") }
+                }
+            }
+
+        is TodayUiState.NotStarted ->
+            Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("${state.arcName} starts ${state.startDate}.")
+            }
+
+        is TodayUiState.Ended ->
+            Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("${state.arcName} has ended (${state.totalDays} days).")
+            }
+
+        is TodayUiState.Loaded ->
+            TodayContent(
+                state = state,
+                onToggleBinary = onToggleBinary,
+                onCounterChange = onCounterChange,
+                onDurationChange = onDurationChange,
+                onLogChange = onLogChange,
+                onUndo = onUndo,
+                modifier = modifier,
+            )
+    }
+}
+
+@Composable
+private fun TodayContent(
+    state: TodayUiState.Loaded,
+    onToggleBinary: (String, Boolean) -> Unit,
+    onCounterChange: (String, Double) -> Unit,
+    onDurationChange: (String, Double) -> Unit,
+    onLogChange: (String, Double) -> Unit,
+    onUndo: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item {
+            Column {
+                Text(state.arcName, style = MaterialTheme.typography.headlineSmall)
+                Text("Day ${state.dayNumber} of ${state.totalDays}", style = MaterialTheme.typography.bodyMedium)
+                Text("Today: ${state.todayState.label()}", style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        items(state.commitments, key = { it.id }) { commitment ->
+            CommitmentCard(
+                commitment = commitment,
+                onToggleBinary = { done -> onToggleBinary(commitment.id, done) },
+                onCounterChange = { value -> onCounterChange(commitment.id, value) },
+                onDurationChange = { value -> onDurationChange(commitment.id, value) },
+                onLogChange = { value -> onLogChange(commitment.id, value) },
+                onUndo = { onUndo(commitment.id) },
+            )
+        }
+    }
+}
+
+private fun DayState.label(): String = when (this) {
+    DayState.COMPLETE -> "complete"
+    DayState.PENDING -> "pending"
+    DayState.REST -> "rest"
+    DayState.MISSED -> "missed"
+    DayState.PARTIAL -> "partial"
+    DayState.FUTURE -> "future"
+    DayState.OUT_OF_RANGE -> "out of range"
+}
+
+@Composable
+private fun CommitmentCard(
+    commitment: CommitmentUiState,
+    onToggleBinary: (Boolean) -> Unit,
+    onCounterChange: (Double) -> Unit,
+    onDurationChange: (Double) -> Unit,
+    onLogChange: (Double) -> Unit,
+    onUndo: () -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column {
+                    Text(commitment.name, style = MaterialTheme.typography.titleMedium)
+                    if (!commitment.isRequired) {
+                        Text("optional", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+                Text(if (commitment.isSatisfied) "✓ done" else "not done")
+            }
+            Spacer(Modifier.height(8.dp))
+            when (commitment.type) {
+                CommitmentType.BINARY -> BinaryControl(commitment, onToggleBinary)
+                CommitmentType.COUNTER -> StepperControl(commitment, unitLabel = commitment.unit ?: "", onChange = onCounterChange)
+                CommitmentType.DURATION -> StepperControl(commitment, unitLabel = "min", onChange = onDurationChange)
+                CommitmentType.LOG -> LogControl(commitment, onChange = onLogChange, onClear = onUndo)
+            }
+            if (commitment.currentValue != null) {
+                TextButton(onClick = onUndo) { Text("Undo") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BinaryControl(commitment: CommitmentUiState, onToggle: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(
+            checked = (commitment.currentValue ?: 0.0) >= 1.0,
+            onCheckedChange = onToggle,
+        )
+        Text("Done")
+    }
+}
+
+@Composable
+private fun StepperControl(commitment: CommitmentUiState, unitLabel: String, onChange: (Double) -> Unit) {
+    val current = commitment.currentValue ?: 0.0
+    val target = commitment.targetValue
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        OutlinedButton(onClick = { onChange((current - 1).coerceAtLeast(0.0)) }) { Text("−") }
+        val targetText = if (target != null) " / ${target.toInt()}" else ""
+        Text(
+            "${current.toInt()}$targetText $unitLabel",
+            modifier = Modifier.padding(horizontal = 12.dp),
+        )
+        OutlinedButton(onClick = { onChange(current + 1) }) { Text("+") }
+    }
+}
+
+// docs/tasks/10-fix-entry-write-race.md — writes only commit on the IME
+// "done" action or on losing focus, not per keystroke. Empty input commits
+// as a clear (onClear, the same undo the card's "Undo" button uses); an
+// unparseable value is discarded and the field reverts to the last known
+// value rather than writing garbage.
+@Composable
+private fun LogControl(commitment: CommitmentUiState, onChange: (Double) -> Unit, onClear: () -> Unit) {
+    var text by remember(commitment.id) {
+        mutableStateOf(commitment.currentValue?.toString().orEmpty())
+    }
+    var isFocused by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+
+    // Follows Resolution's value when it changes for some other reason (e.g.
+    // undo elsewhere) — but never while this field is focused, or the user's
+    // in-progress typing would be overwritten mid-entry.
+    LaunchedEffect(commitment.currentValue) {
+        if (!isFocused) {
+            text = commitment.currentValue?.toString().orEmpty()
+        }
+    }
+
+    fun commit() {
+        val trimmed = text.trim()
+        when {
+            trimmed.isEmpty() -> onClear()
+            else -> trimmed.toDoubleOrNull()?.let(onChange) ?: run {
+                text = commitment.currentValue?.toString().orEmpty()
+            }
+        }
+    }
+
+    OutlinedTextField(
+        value = text,
+        onValueChange = { text = it },
+        label = { Text(commitment.unit ?: "value") },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = {
+            commit()
+            focusManager.clearFocus()
+        }),
+        modifier = Modifier.onFocusChanged { focusState ->
+            val wasFocused = isFocused
+            isFocused = focusState.isFocused
+            if (wasFocused && !isFocused) {
+                commit()
+            }
+        },
+    )
+}
+
+private val previewDate: LocalDate = LocalDate.of(2026, 9, 11)
+
+private fun fakeCommitment(
+    id: String,
+    name: String,
+    type: CommitmentType,
+    isRequired: Boolean = true,
+    targetValue: Double? = null,
+    unit: String? = null,
+    currentValue: Double? = null,
+    isSatisfied: Boolean = false,
+) = CommitmentUiState(
+    id = id,
+    name = name,
+    type = type,
+    isRequired = isRequired,
+    targetValue = targetValue,
+    unit = unit,
+    currentValue = currentValue,
+    isSatisfied = isSatisfied,
+)
+
+private fun fakeLoadedState() = TodayUiState.Loaded(
+    arcName = "September Reset",
+    dayNumber = 12,
+    totalDays = 40,
+    today = previewDate,
+    todayState = DayState.PENDING,
+    commitments = listOf(
+        fakeCommitment("1", "Meditate", CommitmentType.BINARY, currentValue = 1.0, isSatisfied = true),
+        fakeCommitment("2", "Push-ups", CommitmentType.COUNTER, targetValue = 30.0, unit = "reps", currentValue = 12.0),
+        fakeCommitment("3", "Read", CommitmentType.DURATION, isRequired = false, targetValue = 20.0, unit = "minutes"),
+        fakeCommitment("4", "Weight", CommitmentType.LOG, unit = "kg"),
+    ),
+)
+
+@Preview(showBackground = true, name = "Today screen")
+@Composable
+private fun TodayScreenPreview() {
+    StreakSeasonTheme {
+        TodayScreen(
+            state = fakeLoadedState(),
+            onToggleBinary = { _, _ -> },
+            onCounterChange = { _, _ -> },
+            onDurationChange = { _, _ -> },
+            onLogChange = { _, _ -> },
+            onUndo = {},
+            onCreateArc = {},
+        )
+    }
+}
+
+@Preview(showBackground = true, name = "Binary")
+@Composable
+private fun BinaryCardPreview() {
+    StreakSeasonTheme {
+        CommitmentCard(
+            commitment = fakeCommitment("1", "Meditate", CommitmentType.BINARY),
+            onToggleBinary = {}, onCounterChange = {}, onDurationChange = {}, onLogChange = {}, onUndo = {},
+        )
+    }
+}
+
+@Preview(showBackground = true, name = "Counter")
+@Composable
+private fun CounterCardPreview() {
+    StreakSeasonTheme {
+        CommitmentCard(
+            commitment = fakeCommitment("2", "Push-ups", CommitmentType.COUNTER, targetValue = 30.0, unit = "reps", currentValue = 12.0),
+            onToggleBinary = {}, onCounterChange = {}, onDurationChange = {}, onLogChange = {}, onUndo = {},
+        )
+    }
+}
+
+@Preview(showBackground = true, name = "Duration")
+@Composable
+private fun DurationCardPreview() {
+    StreakSeasonTheme {
+        CommitmentCard(
+            commitment = fakeCommitment(
+                "3", "Read", CommitmentType.DURATION,
+                isRequired = false, targetValue = 20.0, unit = "minutes", currentValue = 20.0, isSatisfied = true,
+            ),
+            onToggleBinary = {}, onCounterChange = {}, onDurationChange = {}, onLogChange = {}, onUndo = {},
+        )
+    }
+}
+
+@Preview(showBackground = true, name = "Log")
+@Composable
+private fun LogCardPreview() {
+    StreakSeasonTheme {
+        CommitmentCard(
+            commitment = fakeCommitment("4", "Weight", CommitmentType.LOG, unit = "kg", currentValue = 71.2, isSatisfied = true),
+            onToggleBinary = {}, onCounterChange = {}, onDurationChange = {}, onLogChange = {}, onUndo = {},
+        )
+    }
+}

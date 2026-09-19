@@ -1,0 +1,23 @@
+{
+  "id": "daynum_after_arc_ends",
+  "rules": ["R2"],
+  "description": "day_number stays pinned at total_days once today is past end_date — elapsedDates caps at end_date and never grows past it.",
+  "now": "2026-03-01T10:00:00",
+  "arc": {
+    "id": "arc-1",
+    "name": "Finished Arc",
+    "start_date": "2026-01-01",
+    "end_date": "2026-01-10",
+    "status": "active",
+    "strictness": "chill",
+    "rest_tokens_per_week": 0,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+  "commitments": [],
+  "days": [],
+  "expect": {
+    "day_number": 10,
+    "total_days": 10
+  }
+}

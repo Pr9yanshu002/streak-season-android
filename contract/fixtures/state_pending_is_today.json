@@ -1,0 +1,34 @@
+{
+  "id": "state_pending_is_today",
+  "rules": ["R1", "R5"],
+  "description": "Today resolves to pending, not missed, even with nothing logged yet — the day isn't over.",
+  "now": "2026-01-15T10:00:00",
+  "arc": {
+    "id": "arc-1",
+    "name": "Gym Arc",
+    "start_date": "2026-01-10",
+    "end_date": "2026-02-10",
+    "status": "active",
+    "strictness": "chill",
+    "rest_tokens_per_week": 0,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+  "commitments": [
+    {
+      "id": "c-gym",
+      "name": "Gym",
+      "type": "binary",
+      "is_required": true,
+      "schedule_type": "daily",
+      "active_from": "2026-01-10"
+    }
+  ],
+  "days": [],
+  "expect": {
+    "effective_today": "2026-01-15",
+    "day_states": {
+      "2026-01-15": "pending"
+    }
+  }
+}

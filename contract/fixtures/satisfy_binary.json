@@ -1,0 +1,37 @@
+{
+  "id": "satisfy_binary",
+  "rules": ["R4", "R5"],
+  "description": "A binary commitment is satisfied only when its value is at least 1 — logging an explicit 0 exists as an entry but still doesn't satisfy.",
+  "now": "2026-01-17T10:00:00",
+  "arc": {
+    "id": "arc-1",
+    "name": "Pushups Arc",
+    "start_date": "2026-01-10",
+    "end_date": "2026-02-10",
+    "status": "active",
+    "strictness": "chill",
+    "rest_tokens_per_week": 0,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+  "commitments": [
+    {
+      "id": "c-pushups",
+      "name": "Pushups",
+      "type": "binary",
+      "is_required": true,
+      "schedule_type": "daily",
+      "active_from": "2026-01-10"
+    }
+  ],
+  "days": [
+    { "date": "2026-01-15", "entries": { "c-pushups": 1 } },
+    { "date": "2026-01-16", "entries": { "c-pushups": 0 } }
+  ],
+  "expect": {
+    "day_states": {
+      "2026-01-15": "complete",
+      "2026-01-16": "missed"
+    }
+  }
+}

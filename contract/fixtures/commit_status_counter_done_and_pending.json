@@ -1,0 +1,50 @@
+{
+  "id": "commit_status_counter_done_and_pending",
+  "rules": ["R4"],
+  "description": "A counter commitment is done when its entry meets the target, pending when it's logged but under target.",
+  "now": "2026-01-10T10:00:00",
+  "arc": {
+    "id": "arc-1",
+    "name": "Counter Status Arc",
+    "start_date": "2026-01-01",
+    "end_date": "2026-01-31",
+    "status": "active",
+    "strictness": "chill",
+    "rest_tokens_per_week": 0,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+  "commitments": [
+    {
+      "id": "c-counter-done",
+      "name": "Water (met)",
+      "type": "counter",
+      "target_value": 8,
+      "unit": "glasses",
+      "is_required": true,
+      "schedule_type": "daily",
+      "active_from": "2026-01-01"
+    },
+    {
+      "id": "c-counter-pending",
+      "name": "Water (short)",
+      "type": "counter",
+      "target_value": 8,
+      "unit": "glasses",
+      "is_required": true,
+      "schedule_type": "daily",
+      "active_from": "2026-01-01"
+    }
+  ],
+  "days": [
+    { "date": "2026-01-10", "entries": { "c-counter-done": 8, "c-counter-pending": 5 } }
+  ],
+  "expect": {
+    "commitment_statuses": {
+      "2026-01-10": {
+        "c-counter-done": "done",
+        "c-counter-pending": "pending"
+      }
+    }
+  }
+}

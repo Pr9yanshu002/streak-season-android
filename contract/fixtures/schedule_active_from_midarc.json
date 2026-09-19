@@ -1,0 +1,34 @@
+{
+  "id": "schedule_active_from_midarc",
+  "rules": ["R3"],
+  "description": "A commitment added on day 20 of the arc counts from day 20 onward — day 19 is unaffected and resolves complete by vacancy, not retroactively missed.",
+  "now": "2026-01-21T09:00:00",
+  "arc": {
+    "id": "arc-1",
+    "name": "Mid-Arc Addition",
+    "start_date": "2026-01-01",
+    "end_date": "2026-02-12",
+    "status": "active",
+    "strictness": "chill",
+    "rest_tokens_per_week": 0,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+  "commitments": [
+    {
+      "id": "c-meditate",
+      "name": "Meditate",
+      "type": "binary",
+      "is_required": true,
+      "schedule_type": "daily",
+      "active_from": "2026-01-20"
+    }
+  ],
+  "days": [],
+  "expect": {
+    "day_states": {
+      "2026-01-19": "complete",
+      "2026-01-20": "missed"
+    }
+  }
+}

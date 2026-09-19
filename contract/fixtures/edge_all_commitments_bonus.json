@@ -1,0 +1,35 @@
+{
+  "id": "edge_all_commitments_bonus",
+  "rules": ["R5", "R8"],
+  "description": "When every commitment is bonus, every day resolves complete by vacancy, but none of them count toward completion percentage — the denominator is 0, so the percentage is 0, not 100.",
+  "now": "2026-01-15T10:00:00",
+  "arc": {
+    "id": "arc-1",
+    "name": "All Bonus Arc",
+    "start_date": "2026-01-10",
+    "end_date": "2026-01-14",
+    "status": "active",
+    "strictness": "chill",
+    "rest_tokens_per_week": 0,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+  "commitments": [
+    {
+      "id": "c-journal",
+      "name": "Journal",
+      "type": "log",
+      "is_required": false,
+      "schedule_type": "daily",
+      "active_from": "2026-01-10"
+    }
+  ],
+  "days": [],
+  "expect": {
+    "day_states": {
+      "2026-01-10": "complete",
+      "2026-01-14": "complete"
+    },
+    "completion_pct": 0.0
+  }
+}
