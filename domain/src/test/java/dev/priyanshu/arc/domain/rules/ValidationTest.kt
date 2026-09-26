@@ -40,4 +40,33 @@ class ValidationTest {
         val today = LocalDate.of(2026, 1, 15)
         assertTrue(isValidStartDate(LocalDate.of(2026, 6, 1), today, backfillDays = 2))
     }
+
+    // R17 — arc name.
+
+    @Test
+    fun `a name with non-whitespace characters is valid`() {
+        assertTrue(isValidArcName("September Reset"))
+        assertTrue(isValidArcName("  trimmed later, but has content  "))
+    }
+
+    @Test
+    fun `an empty or whitespace-only name is invalid`() {
+        assertFalse(isValidArcName(""))
+        assertFalse(isValidArcName("   "))
+        assertFalse(isValidArcName("\t\n"))
+    }
+
+    // R18 — at least one required commitment.
+
+    @Test
+    fun `at least one required commitment is valid`() {
+        assertTrue(hasAtLeastOneRequiredCommitment(listOf(true)))
+        assertTrue(hasAtLeastOneRequiredCommitment(listOf(false, true, false)))
+    }
+
+    @Test
+    fun `all-bonus or empty commitment sets are invalid`() {
+        assertFalse(hasAtLeastOneRequiredCommitment(listOf(false, false)))
+        assertFalse(hasAtLeastOneRequiredCommitment(emptyList()))
+    }
 }

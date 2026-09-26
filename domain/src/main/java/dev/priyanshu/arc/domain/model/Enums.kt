@@ -16,3 +16,5 @@ enum class DayState { FUTURE, OUT_OF_RANGE, COMPLETE, PENDING, REST, MISSED, PAR
 // only ever change the aggregate DayState, not an individual commitment's
 // satisfaction.
 enum class CommitmentStatus { NOT_SCHEDULED, PENDING, DONE }
+
+enum class MilestoneKind { START, P25, P50, P75, FINAL }

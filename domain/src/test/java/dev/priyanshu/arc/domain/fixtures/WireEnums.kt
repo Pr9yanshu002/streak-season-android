@@ -4,6 +4,7 @@ import dev.priyanshu.arc.domain.model.ArcStatus
 import dev.priyanshu.arc.domain.model.CommitmentStatus
 import dev.priyanshu.arc.domain.model.CommitmentType
 import dev.priyanshu.arc.domain.model.DayState
+import dev.priyanshu.arc.domain.model.MilestoneKind
 import dev.priyanshu.arc.domain.model.ScheduleType
 import dev.priyanshu.arc.domain.model.Strictness
 
@@ -46,6 +47,15 @@ fun parseCommitmentStatus(raw: String): CommitmentStatus = when (raw) {
     "pending" -> CommitmentStatus.PENDING
     "done" -> CommitmentStatus.DONE
     else -> error("Unknown commitment status '$raw'")
+}
+
+fun parseMilestoneKind(raw: String): MilestoneKind = when (raw) {
+    "start" -> MilestoneKind.START
+    "p25" -> MilestoneKind.P25
+    "p50" -> MilestoneKind.P50
+    "p75" -> MilestoneKind.P75
+    "final" -> MilestoneKind.FINAL
+    else -> error("Unknown milestone kind '$raw'")
 }
 
 fun parseDayState(raw: String): DayState = when (raw) {

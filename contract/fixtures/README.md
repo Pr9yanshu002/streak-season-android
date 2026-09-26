@@ -4,7 +4,7 @@ Each fixture is a JSON file describing an arc, some check-ins, a frozen
 "now", and the expected output of the rules engine.
 
 Both clients load the same files and assert against them. When Kotlin and Swift
-disagree, a fixture goes red and tells you which rule (`R1`–`R14`) broke.
+disagree, a fixture goes red and tells you which rule (`R1`–`R18`) broke.
 
 These files are the closest thing this project has to shared code. Treat a
 change to a fixture the way you'd treat a change to a public API.
@@ -85,6 +85,12 @@ change to a fixture the way you'd treat a change to a public API.
 - **`completion_pct`** is compared to **4 decimal places**. Both engines must
   round the same way — round half up.
 - Any key in `expect` may be omitted. Only assert what the fixture is about.
+- **`note`** is an optional top-level prose field — free-text commentary, read
+  by neither engine. It must sit at the top level (next to `description`), never
+  inside `expect`: a key inside `expect` that isn't a real assertion field is
+  how a typo like `current_streek` slips through silently, so `FixtureExpectKeysTest`
+  fails on any `expect` key it doesn't recognise (the allowed set is derived
+  from `ExpectDto`'s `@SerialName`s).
 - **`failed_on_date`** is only meaningful alongside `arc_status`. If a fixture
   asserts `arc_status`, it must also include `failed_on_date` — `null` when
   the arc did not fail. Fixtures that don't touch failure state omit both.
@@ -106,6 +112,21 @@ change to a fixture the way you'd treat a change to a public API.
       "c-gym": "done",
       "c-weekday-run": "not_scheduled"
     }
+  }
+  ```
+- **`required_milestones`** (R12) maps milestone kind (`start`/`p25`/`p50`/
+  `p75`/`final`) to the exact date its threshold was crossed — never the date
+  the app happened to check (`effective_today`). Unlike `day_states` and
+  `commitment_statuses`, this is asserted as a **whole map**, not key by key:
+  a kind the engine returns that the fixture omits fails the test, same
+  reasoning as `commit_status_no_missing_keys` — a partial assertion would let
+  a threshold firing too early pass silently.
+
+  ```jsonc
+  "required_milestones": {
+    "start": "2026-01-12",
+    "p25":   "2026-01-21",
+    "p50":   "2026-01-31"
   }
   ```
 

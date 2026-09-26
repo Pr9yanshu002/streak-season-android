@@ -2,6 +2,7 @@
   "id": "pct_excludes_unscheduled_days",
   "rules": ["R3", "R5", "R8"],
   "description": "A weekdays-only arc must not be inflated by free weekends. Sat/Sun resolve to complete (no required scheduled) but are excluded from the percentage denominator.",
+  "note": "Denominator is the 5 scheduled weekdays only. Sat 17 and Sun 18 are complete-by-vacancy and excluded; Mon 19 is pending and excluded.",
   "now": "2026-01-19T20:00:00",
   "arc": {
     "id": "arc-1",
@@ -45,7 +46,6 @@
       "2026-01-18": "complete",
       "2026-01-19": "pending"
     },
-    "completion_pct": 0.8,
-    "note": "Denominator is the 5 scheduled weekdays only. Sat 17 and Sun 18 are complete-by-vacancy and excluded; Mon 19 is pending and excluded."
+    "completion_pct": 0.8
   }
 }

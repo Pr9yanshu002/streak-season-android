@@ -1,0 +1,27 @@
+{
+  "id": "milestone_p25_exact_boundary",
+  "rules": ["R12"],
+  "description": "p25 is required exactly at the boundary (dayNumber == crossingDay), not only past it — >=, not >.",
+  "now": "2026-01-10T10:00:00",
+  "arc": {
+    "id": "arc-1",
+    "name": "Test Arc",
+    "start_date": "2026-01-01",
+    "end_date": "2026-02-09",
+    "status": "active",
+    "strictness": "chill",
+    "rest_tokens_per_week": 0,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+  "commitments": [],
+  "days": [],
+  "expect": {
+    "day_number": 10,
+    "total_days": 40,
+    "required_milestones": {
+      "start": "2026-01-01",
+      "p25": "2026-01-10"
+    }
+  }
+}

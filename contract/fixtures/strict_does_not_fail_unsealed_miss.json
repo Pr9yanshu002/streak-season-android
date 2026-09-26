@@ -2,6 +2,7 @@
   "id": "strict_does_not_fail_unsealed_miss",
   "rules": ["R7", "R9"],
   "description": "A strict arc with a missed day still inside the backfill window must NOT fail. The user has until the date seals to log it. This is the rule that makes strict mode survivable.",
+  "note": "2026-01-14 is missed but unsealed (16 > 14 + 2 is false), so no failure yet. Tomorrow it seals and the arc fails on that date.",
   "now": "2026-01-16T10:00:00",
   "arc": {
     "id": "arc-1",
@@ -39,7 +40,6 @@
       "2026-01-15": "missed",
       "2026-01-16": "pending"
     },
-    "sealed_dates": ["2026-01-10", "2026-01-11", "2026-01-12", "2026-01-13"],
-    "note": "2026-01-14 is missed but unsealed (16 > 14 + 2 is false), so no failure yet. Tomorrow it seals and the arc fails on that date."
+    "sealed_dates": ["2026-01-10", "2026-01-11", "2026-01-12", "2026-01-13"]
   }
 }

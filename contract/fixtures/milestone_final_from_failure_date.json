@@ -1,0 +1,39 @@
+{
+  "id": "milestone_final_from_failure_date",
+  "rules": ["R9", "R12"],
+  "description": "final is required as soon as a strict arc fails, dated at failed_on_date — not today, and not the arc's end_date.",
+  "now": "2026-04-10T10:00:00",
+  "arc": {
+    "id": "arc-1",
+    "name": "Test Arc",
+    "start_date": "2026-04-01",
+    "end_date": "2026-04-30",
+    "status": "active",
+    "strictness": "strict",
+    "rest_tokens_per_week": 0,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+  "commitments": [
+    {
+      "id": "c-gym",
+      "name": "Gym",
+      "type": "binary",
+      "is_required": true,
+      "schedule_type": "daily",
+      "active_from": "2026-04-01"
+    }
+  ],
+  "days": [],
+  "expect": {
+    "day_number": 10,
+    "total_days": 30,
+    "arc_status": "failed",
+    "failed_on_date": "2026-04-01",
+    "required_milestones": {
+      "start": "2026-04-01",
+      "p25": "2026-04-08",
+      "final": "2026-04-01"
+    }
+  }
+}

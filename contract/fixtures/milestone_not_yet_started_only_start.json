@@ -1,0 +1,26 @@
+{
+  "id": "milestone_not_yet_started_only_start",
+  "rules": ["R12"],
+  "description": "Before start_date, only start is required — it anchors the recap timeline even though the arc hasn't begun.",
+  "now": "2026-04-20T10:00:00",
+  "arc": {
+    "id": "arc-1",
+    "name": "Test Arc",
+    "start_date": "2026-05-01",
+    "end_date": "2026-05-30",
+    "status": "active",
+    "strictness": "chill",
+    "rest_tokens_per_week": 0,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+  "commitments": [],
+  "days": [],
+  "expect": {
+    "day_number": 0,
+    "total_days": 30,
+    "required_milestones": {
+      "start": "2026-05-01"
+    }
+  }
+}

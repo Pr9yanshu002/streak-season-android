@@ -8,6 +8,7 @@ import dev.priyanshu.arc.domain.model.CommitmentType
 import dev.priyanshu.arc.domain.model.Day
 import dev.priyanshu.arc.domain.model.DayState
 import dev.priyanshu.arc.domain.model.Entry
+import dev.priyanshu.arc.domain.model.MilestoneKind
 import dev.priyanshu.arc.domain.model.ScheduleType
 import dev.priyanshu.arc.domain.model.Strictness
 import java.math.BigDecimal
@@ -45,6 +46,9 @@ object RulesEngine {
         val today = effectiveToday(now, arc.dayBoundaryHour)
         val daysByDate = days.associateBy { it.date }
 
+        val dayNumber = dayNumber(arc, today)
+        val totalDays = totalDays(arc)
+
         // Stage 1 (R1-R5): each date's state as if rest tokens didn't exist.
         // Per-commitment status (R3/R4) rides along in the same pass since it
         // needs the same entriesForDate lookup and is never touched by rest
@@ -76,6 +80,8 @@ object RulesEngine {
         val failedOnDate = if (arc.strictness == Strictness.STRICT) firstSealedFailure(arc, dayStates, sealed, today) else null
         val arcStatus = resolveArcStatus(arc, today, failedOnDate)
 
+        val requiredMilestones = requiredMilestones(arc, dayNumber, totalDays, arcStatus, failedOnDate)
+
         return Resolution(
             effectiveToday = today,
             dayStates = dayStates,
@@ -89,6 +95,7 @@ object RulesEngine {
             dayNumber = dayNumber(arc, today),
             totalDays = totalDays(arc),
             commitmentStatuses = commitmentStatuses,
+            requiredMilestones = requiredMilestones,
         )
     }
 }
@@ -422,6 +429,59 @@ internal fun bestStreak(arc: Arc, dayStates: Map<LocalDate, DayState>, today: Lo
 /** R11 — a day that keeps a streak alive: completed outright, or covered by a rest token. */
 private fun isStreakDay(state: DayState?): Boolean = state == DayState.COMPLETE || state == DayState.REST
 
+/**
+ * R12 — every milestone kind required for this arc as of this resolution,
+ * mapped to the exact date its threshold was crossed. Contents, not just new
+ * arrivals: the engine cannot know what `:app` has already stored, so it
+ * always reports the full set and leaves the diff to `:app`.
+ *
+ * Dates are computed from `arc.startDate`/`totalDays`, never from
+ * `effectiveToday` — R12 (amended) is explicit that `triggered_on_date` is
+ * the date the user crossed the threshold, not the date the app happened to
+ * notice. An app left unopened for a week and crossing p25/p50/p75 at once
+ * must record three distinct dates, not one shared observation date.
+ */
+internal fun requiredMilestones(
+    arc: Arc,
+    dayNumber: Int,
+    totalDays: Int,
+    arcStatus: ArcStatus,
+    failedOnDate: LocalDate?,
+): Map<MilestoneKind, LocalDate> {
+    val out = LinkedHashMap<MilestoneKind, LocalDate>()
+
+    // start — required as soon as the arc exists, even before it has
+    // started; it anchors the recap timeline.
+    out[MilestoneKind.START] = arc.startDate
+
+    // p25 / p50 / p75 — the first dayNumber where dayNumber/totalDays >= threshold.
+    // Integer arithmetic throughout: floating point at a boundary like 0.25 on a
+    // 75-day arc is exactly where it would go wrong.
+    val thresholds = listOf(
+        Triple(MilestoneKind.P25, 1, 4),
+        Triple(MilestoneKind.P50, 1, 2),
+        Triple(MilestoneKind.P75, 3, 4),
+    )
+    for ((kind, num, den) in thresholds) {
+        val crossingDay = ceilDiv(totalDays * num, den)
+        if (dayNumber >= crossingDay) {
+            out[kind] = arc.startDate.plusDays((crossingDay - 1).toLong())
+        }
+    }
+
+    // final — the arc's end date on completion, or the sealed failure date on failure.
+    when (arcStatus) {
+        ArcStatus.COMPLETED -> out[MilestoneKind.FINAL] = arc.endDate
+        ArcStatus.FAILED -> failedOnDate?.let { out[MilestoneKind.FINAL] = it }
+        else -> Unit
+    }
+
+    return out
+}
+
+/** Smallest integer >= a/b, for positive a and b. */
+private fun ceilDiv(a: Int, b: Int): Int = (a + b - 1) / b
+
 data class Resolution(
     val effectiveToday: LocalDate,
     val dayStates: Map<LocalDate, DayState>,
@@ -435,4 +495,5 @@ data class Resolution(
     val dayNumber: Int,
     val totalDays: Int,
     val commitmentStatuses: Map<LocalDate, Map<String, CommitmentStatus>>,
+    val requiredMilestones: Map<MilestoneKind, LocalDate>,
 )

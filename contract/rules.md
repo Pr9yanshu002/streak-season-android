@@ -268,7 +268,18 @@ Thresholds are on **elapsed time**, not completion:
 | `p75`   | first resolution where `progress >= 0.75`         |
 | `final` | when the arc completes (R10) or fails (R9)        |
 
-`triggered_on_date` is set to the `today` at which it was created.
+`triggered_on_date` is the date the threshold was crossed, not the date the app
+observed it. For `start` it is `start_date`; for `p25`/`p50`/`p75` the first
+date whose `dayNumber` meets the threshold; for `final` the arc's `end_date`
+when completed, or `failed_on_date` when failed.
+
+The engine computes these dates exactly from `start_date` and `totalDays`. It
+does not stamp `effectiveToday`, which records when the app happened to notice
+rather than when the user reached the point.
+
+Several thresholds crossed in one resolution therefore carry different dates —
+their own crossing dates, not a shared observation date.
+
 `acknowledged_at` stays null until the user dismisses the full-screen card.
 
 If several thresholds are crossed at once — a short arc, or an app not opened
@@ -322,6 +333,23 @@ R7 stated from the other direction: an arc may only start on a day the user
 could still check in for.
 
 `start_date` may be in the future. Before the arc starts, `dayNumber` is 0 (R2).
+
+---
+
+## R17 — Arc name
+
+An arc's name must contain at least one non-whitespace character.
+
+---
+
+## R18 — At least one required commitment
+
+An arc must have at least one commitment with `is_required = 1`.
+
+An arc where every commitment is a bonus computes 0% completion for its entire
+life under R8, because no day has a required commitment scheduled and the
+counted set is always empty. That is correct by the rules and meaningless on
+screen, so it is blocked at creation rather than rendered.
 
 ---
 

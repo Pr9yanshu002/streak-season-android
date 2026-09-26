@@ -5,6 +5,7 @@ import dev.priyanshu.arc.domain.fixtures.FixtureLoader
 import dev.priyanshu.arc.domain.fixtures.parseArcStatus
 import dev.priyanshu.arc.domain.fixtures.parseCommitmentStatus
 import dev.priyanshu.arc.domain.fixtures.parseDayState
+import dev.priyanshu.arc.domain.fixtures.parseMilestoneKind
 import dev.priyanshu.arc.domain.fixtures.toDomain
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.DynamicTest
@@ -100,6 +101,17 @@ class RulesEngineFixtureTest {
                     "[${fixture.id}] commitment_statuses[$dateStr][$commitmentId]",
                 )
             }
+        }
+
+        // Whole-map comparison, not key-by-key (fixtures/README.md) — a kind
+        // the engine returns that the fixture doesn't list must fail, the
+        // same reasoning as commit_status_no_missing_keys. A partial
+        // assertion would let a threshold firing too early pass silently.
+        expect.requiredMilestones?.let { expectedRaw ->
+            val expected = expectedRaw.entries.associate { (kind, date) ->
+                parseMilestoneKind(kind) to LocalDate.parse(date)
+            }
+            assertEquals(expected, resolution.requiredMilestones, "[${fixture.id}] required_milestones")
         }
     }
 

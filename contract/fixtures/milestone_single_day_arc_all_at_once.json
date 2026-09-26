@@ -1,0 +1,31 @@
+{
+  "id": "milestone_single_day_arc_all_at_once",
+  "rules": ["R12"],
+  "description": "A 1-day arc crosses start/p25/p50/p75 all on the same date — final is not required yet since today is not past end_date.",
+  "now": "2026-03-01T10:00:00",
+  "arc": {
+    "id": "arc-1",
+    "name": "Test Arc",
+    "start_date": "2026-03-01",
+    "end_date": "2026-03-01",
+    "status": "active",
+    "strictness": "chill",
+    "rest_tokens_per_week": 0,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+  "commitments": [],
+  "days": [],
+  "expect": {
+    "day_number": 1,
+    "total_days": 1,
+    "arc_status": "active",
+    "failed_on_date": null,
+    "required_milestones": {
+      "start": "2026-03-01",
+      "p25": "2026-03-01",
+      "p50": "2026-03-01",
+      "p75": "2026-03-01"
+    }
+  }
+}

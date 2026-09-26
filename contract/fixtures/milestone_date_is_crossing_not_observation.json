@@ -1,0 +1,27 @@
+{
+  "id": "milestone_date_is_crossing_not_observation",
+  "rules": ["R12"],
+  "description": "triggered_on_date is the date a threshold was crossed, not the date the app happened to notice it — effective_today (2026-02-05) is several days past p50's crossing date (2026-01-31).",
+  "now": "2026-02-05T10:00:00",
+  "arc": {
+    "id": "arc-1",
+    "name": "Test Arc",
+    "start_date": "2026-01-12",
+    "end_date": "2026-02-20",
+    "status": "active",
+    "strictness": "chill",
+    "rest_tokens_per_week": 0,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+  "commitments": [],
+  "days": [],
+  "expect": {
+    "effective_today": "2026-02-05",
+    "required_milestones": {
+      "start": "2026-01-12",
+      "p25": "2026-01-21",
+      "p50": "2026-01-31"
+    }
+  }
+}

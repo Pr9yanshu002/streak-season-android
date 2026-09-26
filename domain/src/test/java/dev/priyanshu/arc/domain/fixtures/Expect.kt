@@ -26,4 +26,9 @@ data class ExpectDto(
     @SerialName("total_days") val totalDays: Int? = null,
     // date -> commitment id -> status string ("not_scheduled" / "pending" / "done").
     @SerialName("commitment_statuses") val commitmentStatuses: Map<String, Map<String, String>>? = null,
+    // kind -> the exact date its threshold was crossed (R12, amended). Assert
+    // the whole map, not key by key — a kind the engine returns that the
+    // fixture omits must fail, same reasoning as commit_status_no_missing_keys.
+    @SerialName("required_milestones")
+    val requiredMilestones: Map<String, String>? = null,
 )
