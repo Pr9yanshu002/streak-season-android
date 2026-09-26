@@ -71,6 +71,16 @@ The engine is a synchronous function over in-memory lists.
   mappers, DI setup, navigation scaffolding, test harness.
 - **Claude writes freely:** fixtures, and the Postgres translation later.
 
+## Git workflow
+
+- Never commit to `main`. Every change happens on a branch and lands via PR.
+- Branch name: `task-<nn>-<short-slug>`, matching the brief in `docs/tasks/`
+  (e.g. `task-13-closeout-cleanup`).
+- Before starting a task: `git checkout main && git pull`, then create the branch.
+- Commit messages start with the task number: `Task 13: ...`.
+- Open the PR with `gh pr create --base main`. Do not merge it — Priyanshu
+  reviews and merges.
+
 ## Style
 
 - Pragmatic over pure. No abstraction without a current use.
