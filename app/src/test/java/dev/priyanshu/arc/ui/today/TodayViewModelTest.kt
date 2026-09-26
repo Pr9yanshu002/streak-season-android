@@ -4,7 +4,11 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import dev.priyanshu.arc.data.AppDatabase
 import dev.priyanshu.arc.data.ArcRepository
+import dev.priyanshu.arc.data.CreateArcResult
 import dev.priyanshu.arc.data.FakeClock
+import dev.priyanshu.arc.data.NewCommitment
+import dev.priyanshu.arc.domain.model.CommitmentType
+import dev.priyanshu.arc.domain.model.ScheduleType
 import dev.priyanshu.arc.domain.model.Strictness
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -46,7 +50,14 @@ class TodayViewModelTest {
     }
 
     private fun repository(clock: FakeClock) =
-        ArcRepository(database.arcDao(), database.commitmentDao(), database.dayDao(), database.entryDao(), clock)
+        ArcRepository(
+            database.arcDao(),
+            database.commitmentDao(),
+            database.dayDao(),
+            database.entryDao(),
+            database.milestoneDao(),
+            clock,
+        )
 
     @Test
     fun `arc that has not started yet shows NotStarted`() = runTest {
@@ -71,10 +82,10 @@ class TodayViewModelTest {
     }
 
     @Test
-    fun `arc that is past its end date shows Ended`() = runTest {
+    fun `arc that is past its end date shows Ended as completed`() = runTest {
         val clock = FakeClock(LocalDateTime.of(LocalDate.of(2026, 11, 1), LocalTime.of(10, 0)))
         val repository = repository(clock)
-        repository.createArc(
+        val createResult = repository.createArc(
             name = "Past Arc",
             startDate = LocalDate.of(2026, 9, 1),
             endDate = LocalDate.of(2026, 9, 10),
@@ -84,10 +95,63 @@ class TodayViewModelTest {
             dayBoundaryHour = 4,
             commitments = emptyList(),
         )
+        val arcId = (createResult as CreateArcResult.Created).arcId
 
         val viewModel = TodayViewModel(repository, clock)
         val state = viewModel.state.first { it !is TodayUiState.Loading }
 
-        assertEquals(TodayUiState.Ended(arcName = "Past Arc", totalDays = 10), state)
+        assertEquals(
+            TodayUiState.Ended(
+                arcName = "Past Arc",
+                totalDays = 10,
+                completed = true,
+                failedOnDate = null,
+                sourceArcId = arcId,
+            ),
+            state,
+        )
+    }
+
+    // R9/R10: a strict arc's sealed miss makes it terminal immediately, not
+    // only once today runs past end_date — the date-math signal the old
+    // Ended detection used couldn't tell this apart from a plain in-progress
+    // day, since today (day 10 of 30) still falls well inside the arc's range.
+    @Test
+    fun `strict arc with a sealed miss shows Ended as failed, before its end date`() = runTest {
+        val clock = FakeClock(LocalDateTime.of(LocalDate.of(2026, 9, 10), LocalTime.of(10, 0)))
+        val repository = repository(clock)
+        val createResult = repository.createArc(
+            name = "Strict Arc",
+            startDate = LocalDate.of(2026, 9, 1),
+            endDate = LocalDate.of(2026, 9, 30),
+            strictness = Strictness.STRICT,
+            restTokensPerWeek = 0,
+            backfillDays = 2,
+            dayBoundaryHour = 4,
+            commitments = listOf(
+                NewCommitment(
+                    name = "Gym",
+                    type = CommitmentType.BINARY,
+                    isRequired = true,
+                    scheduleType = ScheduleType.DAILY,
+                ),
+            ),
+        )
+        val arcId = (createResult as CreateArcResult.Created).arcId
+        // 2026-09-01 never logged -> missed, sealed by 2026-09-10 (backfillDays = 2).
+
+        val viewModel = TodayViewModel(repository, clock)
+        val state = viewModel.state.first { it !is TodayUiState.Loading }
+
+        assertEquals(
+            TodayUiState.Ended(
+                arcName = "Strict Arc",
+                totalDays = 30,
+                completed = false,
+                failedOnDate = LocalDate.of(2026, 9, 1),
+                sourceArcId = arcId,
+            ),
+            state,
+        )
     }
 }

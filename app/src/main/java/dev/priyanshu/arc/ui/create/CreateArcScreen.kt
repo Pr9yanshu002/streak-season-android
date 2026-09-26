@@ -44,10 +44,22 @@ import dev.priyanshu.arc.domain.model.Strictness
 import java.time.LocalDate
 import java.util.UUID
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 
 @Composable
 fun CreateArcRoute(
-    viewModel: CreateArcViewModel = koinViewModel(),
+    remixFromArcId: String? = null,
+    // Keyed by remixFromArcId, not the default class-only key: no navigation
+    // library means koinViewModel() would otherwise cache one instance for
+    // the whole process (MainActivity's in-memory route switch reuses it
+    // every time it swaps back to CreateArc), so a second visit with a
+    // different remix source — or a plain "start an arc" after a remix —
+    // would silently reuse the first visit's pre-filled state instead of
+    // re-running the parameterized factory.
+    viewModel: CreateArcViewModel = koinViewModel(
+        key = remixFromArcId ?: "new",
+        parameters = { parametersOf(remixFromArcId) },
+    ),
     onCreated: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,

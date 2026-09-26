@@ -24,6 +24,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -41,6 +42,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import dev.priyanshu.arc.domain.model.CommitmentType
 import dev.priyanshu.arc.domain.model.DayState
+import dev.priyanshu.arc.domain.model.MilestoneKind
 import dev.priyanshu.arc.ui.theme.StreakSeasonTheme
 import java.time.LocalDate
 import org.koin.androidx.compose.koinViewModel
@@ -49,17 +51,34 @@ import org.koin.androidx.compose.koinViewModel
 fun TodayRoute(
     viewModel: TodayViewModel = koinViewModel(),
     onCreateArc: () -> Unit = {},
+    onRemix: (sourceArcId: String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    // No navigation library — MainActivity's in-memory route switch reuses
+    // this same ViewModel instance every time it swaps back to Today
+    // (koinViewModel() caches by class, not by "which visit"), so init alone
+    // would only ever run once per process. Entering this route re-reads the
+    // active arc (TodayViewModel.refresh()); leaving it cancels that
+    // subscription (stopObserving()) so it can't crash on a database change
+    // made while this screen isn't even on screen (e.g. a debug reseed).
+    DisposableEffect(Unit) {
+        viewModel.refresh()
+        onDispose { viewModel.stopObserving() }
+    }
+
     val state by viewModel.state.collectAsState()
+    val pendingMilestone by viewModel.pendingMilestone.collectAsState()
     TodayScreen(
         state = state,
+        pendingMilestone = pendingMilestone,
+        onAcknowledgeMilestone = viewModel::acknowledgeMilestone,
         onToggleBinary = viewModel::completeBinary,
         onCounterChange = viewModel::setCounterValue,
         onDurationChange = viewModel::setDurationValue,
         onLogChange = viewModel::recordLog,
         onUndo = viewModel::undo,
         onCreateArc = onCreateArc,
+        onRemix = onRemix,
         modifier = modifier,
     )
 }
@@ -67,14 +86,25 @@ fun TodayRoute(
 @Composable
 fun TodayScreen(
     state: TodayUiState,
+    pendingMilestone: PendingMilestoneUiState?,
+    onAcknowledgeMilestone: (reflection: String?) -> Unit,
     onToggleBinary: (commitmentId: String, done: Boolean) -> Unit,
     onCounterChange: (commitmentId: String, value: Double) -> Unit,
     onDurationChange: (commitmentId: String, value: Double) -> Unit,
     onLogChange: (commitmentId: String, value: Double) -> Unit,
     onUndo: (commitmentId: String) -> Unit,
     onCreateArc: () -> Unit,
+    onRemix: (sourceArcId: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // A pending milestone takes over the whole screen (docs/tasks/12) —
+    // shown instead of whatever `state` would otherwise render, checked
+    // first regardless of which TodayUiState we're in.
+    if (pendingMilestone != null) {
+        MilestoneCard(milestone = pendingMilestone, onAcknowledge = onAcknowledgeMilestone, modifier = modifier)
+        return
+    }
+
     when (state) {
         is TodayUiState.Loading ->
             Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -104,7 +134,22 @@ fun TodayScreen(
 
         is TodayUiState.Ended ->
             Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("${state.arcName} has ended (${state.totalDays} days).")
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text(
+                        if (state.completed) {
+                            "${state.arcName} is complete — ${state.totalDays} days."
+                        } else {
+                            "${state.arcName} ended on ${state.failedOnDate}."
+                        },
+                        textAlign = TextAlign.Center,
+                    )
+                    Button(onClick = onCreateArc) { Text("Start a new arc") }
+                    // Remix only makes sense for a failed arc — a completed
+                    // one has nothing to retry.
+                    if (!state.completed) {
+                        OutlinedButton(onClick = { onRemix(state.sourceArcId) }) { Text("Remix this arc") }
+                    }
+                }
             }
 
         is TodayUiState.Loaded ->
@@ -153,6 +198,51 @@ private fun TodayContent(
             )
         }
     }
+}
+
+// Full-screen, stock Material 3 (docs/tasks/12) — no animation, no photo
+// picker. The reflection field is optional: an empty/blank value is passed
+// through as null (ArcRepository.acknowledgeMilestone trims it anyway, but
+// keeping that decision visible here matches LogControl's commit()).
+@Composable
+private fun MilestoneCard(
+    milestone: PendingMilestoneUiState,
+    onAcknowledge: (reflection: String?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var reflection by remember(milestone.id) { mutableStateOf("") }
+    Column(
+        modifier = modifier.fillMaxSize().padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(milestone.label(), style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Day ${milestone.dayNumber} of ${milestone.totalDays}",
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        Spacer(Modifier.height(32.dp))
+        OutlinedTextField(
+            value = reflection,
+            onValueChange = { reflection = it },
+            label = { Text("Reflection (optional)") },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(24.dp))
+        Button(onClick = { onAcknowledge(reflection.trim().ifBlank { null }) }) { Text("Continue") }
+    }
+}
+
+// FINAL fires on either completion or failure (R10) — arcCompleted picks
+// which of the two this actually is; it's only ever null for the other
+// kinds, which don't need the distinction.
+private fun PendingMilestoneUiState.label(): String = when (kind) {
+    MilestoneKind.START -> "You're underway"
+    MilestoneKind.P25 -> "A quarter of the way there"
+    MilestoneKind.P50 -> "Halfway there"
+    MilestoneKind.P75 -> "Three quarters there"
+    MilestoneKind.FINAL -> if (arcCompleted == true) "Arc complete" else "Arc ended"
 }
 
 private fun DayState.label(): String = when (this) {
@@ -323,12 +413,15 @@ private fun TodayScreenPreview() {
     StreakSeasonTheme {
         TodayScreen(
             state = fakeLoadedState(),
+            pendingMilestone = null,
+            onAcknowledgeMilestone = {},
             onToggleBinary = { _, _ -> },
             onCounterChange = { _, _ -> },
             onDurationChange = { _, _ -> },
             onLogChange = { _, _ -> },
             onUndo = {},
             onCreateArc = {},
+            onRemix = {},
         )
     }
 }

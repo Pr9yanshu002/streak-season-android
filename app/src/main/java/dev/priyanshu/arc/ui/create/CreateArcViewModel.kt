@@ -10,6 +10,8 @@ import dev.priyanshu.arc.domain.model.CommitmentType
 import dev.priyanshu.arc.domain.model.ScheduleType
 import dev.priyanshu.arc.domain.model.Strictness
 import dev.priyanshu.arc.domain.rules.earliestAllowedStartDate
+import dev.priyanshu.arc.domain.rules.hasAtLeastOneRequiredCommitment
+import dev.priyanshu.arc.domain.rules.isValidArcName
 import dev.priyanshu.arc.domain.rules.isValidStartDate
 import java.time.LocalDate
 import java.util.UUID
@@ -59,8 +61,10 @@ data class CreateArcUiState(
     // R16, called, not re-derived — see earliestAllowedStartDate/isValidStartDate.
     val earliestAllowedStartDate: LocalDate get() = earliestAllowedStartDate(today, backfillDays)
 
+    // R17 — enforced from :domain (isValidArcName), not re-derived here, so the
+    // Swift app validates names identically.
     val nameError: String?
-        get() = if (name.isBlank()) "Name can't be empty." else null
+        get() = if (!isValidArcName(name)) "Name can't be empty." else null
 
     val startDateError: String?
         get() = if (!isValidStartDate(startDate, today, backfillDays)) {
@@ -75,7 +79,10 @@ data class CreateArcUiState(
 
     val step1Error: String? get() = nameError ?: startDateError ?: endDateError
 
-    val hasRequiredCommitment: Boolean get() = commitments.any { it.isRequired }
+    // R18 — enforced from :domain (hasAtLeastOneRequiredCommitment), not
+    // re-derived here, so the Swift app blocks all-bonus arcs identically.
+    val hasRequiredCommitment: Boolean
+        get() = hasAtLeastOneRequiredCommitment(commitments.map { it.isRequired })
 
     val step2Error: String?
         get() = when {
@@ -104,6 +111,7 @@ data class CreateArcUiState(
 class CreateArcViewModel(
     private val repository: ArcRepository,
     private val clock: Clock,
+    private val remixFromArcId: String? = null,
 ) : ViewModel() {
     private val _state: MutableStateFlow<CreateArcUiState>
     val state: StateFlow<CreateArcUiState>
@@ -118,6 +126,19 @@ class CreateArcViewModel(
             CreateArcUiState(today = today, startDate = today, endDate = today.plusDays(59))
         )
         state = _state.asStateFlow()
+
+        // Remix (R9): pre-fill name and commitments from the failed arc.
+        // Dates always start fresh (today..+59, set above) and intention is
+        // deliberately left blank — the user writes a new one, not the old
+        // one (docs/tasks/12).
+        remixFromArcId?.let { sourceArcId ->
+            viewModelScope.launch {
+                val source = repository.getRemixSource(sourceArcId) ?: return@launch
+                _state.update {
+                    it.copy(name = source.name, commitments = source.commitments.map { c -> c.toDraft() })
+                }
+            }
+        }
     }
 
     fun setName(name: String) = _state.update { it.copy(name = name) }
@@ -197,6 +218,7 @@ class CreateArcViewModel(
                 backfillDays = s.backfillDays,
                 dayBoundaryHour = s.dayBoundaryHour,
                 commitments = s.commitments.map { it.toNewCommitment() },
+                remixedFromArcId = remixFromArcId,
             )
             when (result) {
                 is CreateArcResult.Created -> onCreated()
@@ -217,4 +239,17 @@ private fun CommitmentDraft.toNewCommitment(): NewCommitment = NewCommitment(
     isRequired = isRequired,
     scheduleType = scheduleType,
     scheduleDays = if (scheduleType == ScheduleType.WEEKDAYS) scheduleDays.sorted().joinToString(",") else null,
+)
+
+// Remix pre-fill's reverse of toNewCommitment() above. icon is dropped — the
+// creation flow has no icon picker to show it in, same as every other
+// commitment created through this flow.
+private fun NewCommitment.toDraft(): CommitmentDraft = CommitmentDraft(
+    name = name,
+    type = type,
+    targetValue = targetValue,
+    unit = unit,
+    isRequired = isRequired,
+    scheduleType = scheduleType,
+    scheduleDays = scheduleDays.orEmpty().split(",").mapNotNull { it.trim().toIntOrNull() }.toSet(),
 )

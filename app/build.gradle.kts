@@ -12,7 +12,13 @@ android {
 
     defaultConfig {
         applicationId = "dev.priyanshu.arc"
-        minSdk = 26
+        // 29, not lower: every write in this app uses INSERT … ON CONFLICT …
+        // DO UPDATE (EntryDao/DayDao/MilestoneDao), which needs SQLite 3.24+.
+        // Android bundles SQLite with the OS — API 26/27/28 ship 3.18/3.19/3.22
+        // (no upsert; those writes would throw at runtime), API 29 ships 3.28.
+        // Personal-device app, not store-distributed, so Android 10 is a fine
+        // floor (docs/tasks/13-closeout-and-cleanup.md).
+        minSdk = 29
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"

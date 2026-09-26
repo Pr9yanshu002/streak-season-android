@@ -17,13 +17,19 @@ Note: the product is called "Streak Season", but the domain noun in code is
 
 - Never invent a rule. If behaviour is unspecified, stop and ask.
 - If code and `rules.md` disagree, the code is wrong.
-- Rules are numbered R1–R14. Reference them in comments and commit messages.
+- Rules are numbered R1–R18. Reference them in comments and commit messages.
 - `contract/` is a plain folder, not a Gradle module. Do not add it to
   `settings.gradle.kts`.
 
 ## Hard rules
 
 - **Never hard-delete.** Set `deleted_at`. This applies to every table.
+- **Soft-deleted rows still occupy unique indexes.** Any table with both
+  `deleted_at` and a UNIQUE constraint must write via
+  `INSERT … ON CONFLICT(<unique cols>) DO UPDATE … SET deleted_at = NULL`,
+  never a filtered read followed by a plain insert. Room's `@Upsert` cannot be
+  used for these — it matches on the primary key, which is a fresh UUID.
+  Affects: entries, days, milestones.
 - **Every write bumps `updated_at`.** No exceptions.
 - **The rules engine never reads the clock.** No `LocalDate.now()`,
   `System.currentTimeMillis()`, or `Clock.systemDefaultZone()` anywhere in
@@ -86,7 +92,7 @@ stats tab, arc pause, "N times per week" scheduling, video recap, web.
 The `:domain` fixture test harness is built (`RulesEngineFixtureTest`, one
 JUnit 5 dynamic test per fixture in `contract/fixtures/`, copied into test
 resources by the `:domain:copyFixtures` Gradle task). `RulesEngine.resolve()`
-is fully implemented (R1–R11) and all 45 fixtures in `contract/fixtures/`
+is fully implemented (R1–R12) and all 62 fixtures in `contract/fixtures/`
 pass. The rules engine itself is done.
 
 The persistence layer (`docs/tasks/07-room-persistence.md`) is also done:
@@ -94,11 +100,31 @@ Room entities/DAOs, mappers, `Clock`/`SystemClock`/`FakeClock`, `ArcRepository`,
 and Koin DI are all in `:app/data` and `:app/di`, schema-verified against
 `contract/schema.sql` with no differences, `ArcRepositoryTest` passing.
 
-Compose UI: the Today screen (`docs/tasks/08-today-screen.md`) and the arc
-creation flow with empty state (`docs/tasks/11-arc-creation.md`) are both
-done — `ui/today`, `ui/create`, and a two-route `AppRoute` switch in
-`MainActivity` (no `androidx.navigation` dependency; add one when a third
-route makes the in-memory switch stop being enough). `DebugSeeder` only runs
-in debug builds and only when no arc exists yet, so it never clobbers an arc
-created through the UI. Remaining Compose work is whatever comes after arc
-creation (see `docs/tasks/` for the next brief).
+Compose UI: the Today screen (`docs/tasks/08-today-screen.md`), the arc
+creation flow with empty state (`docs/tasks/11-arc-creation.md`), and arc
+lifecycle + milestones (`docs/tasks/12-lifecycle-milestones.md`, amended by
+`12d-r12-amend-milestone-dates.md`) are all done. Arc status/completion
+(R9/R10) and milestones (R12) reconcile from the engine into Room on Today
+load and app resume (`ArcRepository.reconcile`, idempotent). Milestones are
+computed by the engine as an exact `Map<MilestoneKind, LocalDate>` (dated at
+the threshold's crossing day, never at the day the app happened to check) and
+persisted with a conflict-safe upsert. The Today screen has a third case for
+an ended arc (completed or failed, with a Remix option pre-filling the create
+flow on a failed one) and a full-screen milestone acknowledgment card.
+`ui/today`, `ui/create`, and an `AppRoute` switch in `MainActivity` (no
+`androidx.navigation` dependency; `CreateArc` carries an optional remix source
+arc id as a payload). There is a third route, `AppRoute.DebugMenu`, but it is
+debug-only — reached via a 🐞 FAB shown only when the manifest's `debuggable`
+flag is set — so it deliberately does not count as the "real nav graph" trigger:
+it never ships. `TodayRoute` drives `TodayViewModel.refresh()`/`stopObserving()`
+from a `DisposableEffect` (there's no nav library, so `koinViewModel()` caches
+one instance per process — entering re-reads the active arc, leaving cancels the
+subscription so a debug reseed's `clearAllTables()` can't crash a backgrounded
+Today). `DebugSeeder` has two paths, both debug-only: `seedIfNeeded()`
+auto-seeds on first launch, idempotent, bails if any arc exists so it never
+clobbers a UI-created arc; `seed(scenario)` is the debug menu's manual reseed,
+which explicitly wipes every table and reseeds exactly one of six named
+`DebugScenario`s (empty, not-started, active-mid-arc, milestone-pending,
+ended-completed, ended-failed). `docs/architecture.md` is a from-scratch
+architecture walkthrough written for the eventual Swift port. Remaining Compose
+work is whatever comes next (see `docs/tasks/` for the next brief).
