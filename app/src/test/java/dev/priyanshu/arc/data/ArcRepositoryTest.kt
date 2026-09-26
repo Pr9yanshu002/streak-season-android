@@ -8,6 +8,7 @@ import dev.priyanshu.arc.domain.model.Commitment
 import dev.priyanshu.arc.domain.model.CommitmentType
 import dev.priyanshu.arc.domain.model.Day
 import dev.priyanshu.arc.domain.model.Entry
+import dev.priyanshu.arc.domain.model.MilestoneKind
 import dev.priyanshu.arc.domain.model.ScheduleType
 import dev.priyanshu.arc.domain.model.Strictness
 import dev.priyanshu.arc.domain.rules.RulesEngine
@@ -18,6 +19,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -46,7 +49,14 @@ class ArcRepositoryTest {
             .allowMainThreadQueries()
             .build()
         clock = FakeClock(LocalDateTime.of(today, LocalTime.of(10, 0)))
-        repository = ArcRepository(database.arcDao(), database.commitmentDao(), database.dayDao(), database.entryDao(), clock)
+        repository = ArcRepository(
+            database.arcDao(),
+            database.commitmentDao(),
+            database.dayDao(),
+            database.entryDao(),
+            database.milestoneDao(),
+            clock,
+        )
     }
 
     @After
@@ -151,6 +161,177 @@ class ArcRepositoryTest {
         val expected = RulesEngine.resolve(expectedArc, expectedCommitments, expectedDays, clock.now())
 
         assertEquals(expected, actual)
+    }
+
+    // docs/tasks/12-lifecycle-milestones.md: "a test that reconciles twice
+    // and asserts one status write and one milestone row per kind." Calling
+    // reconcile() a second time (with the clock advanced, so a spurious
+    // second write would be visible) must leave completed_at and every
+    // milestone row exactly as the first call left them.
+    @Test
+    fun `reconcile is idempotent — a second call does not rewrite status or duplicate milestones`() = runTest {
+        val clock = FakeClock(LocalDateTime.of(LocalDate.of(2026, 11, 1), LocalTime.of(10, 0)))
+        val repository = ArcRepository(
+            database.arcDao(),
+            database.commitmentDao(),
+            database.dayDao(),
+            database.entryDao(),
+            database.milestoneDao(),
+            clock,
+        )
+        val createResult = repository.createArc(
+            name = "October",
+            startDate = LocalDate.of(2026, 9, 1),
+            endDate = LocalDate.of(2026, 9, 10),
+            strictness = Strictness.CHILL,
+            restTokensPerWeek = 0,
+            backfillDays = 2,
+            dayBoundaryHour = 4,
+            commitments = emptyList(),
+        )
+        val arcId = (createResult as CreateArcResult.Created).arcId
+
+        repository.reconcile(arcId)
+        val arcAfterFirst = requireNotNull(database.arcDao().observeById(arcId).first())
+        val milestonesAfterFirst = database.milestoneDao().observeByArc(arcId).first()
+
+        assertEquals("completed", arcAfterFirst.status)
+        assertEquals(setOf("start", "p25", "p50", "p75", "final"), milestonesAfterFirst.map { it.kind }.toSet())
+
+        clock.advanceTo(LocalDateTime.of(LocalDate.of(2026, 11, 2), LocalTime.of(10, 0)))
+        repository.reconcile(arcId)
+        val arcAfterSecond = requireNotNull(database.arcDao().observeById(arcId).first())
+        val milestonesAfterSecond = database.milestoneDao().observeByArc(arcId).first()
+
+        // Same completed_at, not re-stamped with the second call's clock —
+        // updateStatusIfChanged's WHERE guard means no second write happened.
+        assertEquals(arcAfterFirst.completedAt, arcAfterSecond.completedAt)
+        // Same rows (same ids, same updated_at) — the diff-against-stored
+        // check in reconcile() skipped every kind, not just avoided a crash
+        // on the unique index.
+        assertEquals(milestonesAfterFirst.map { it.id to it.updatedAt }.toSet(), milestonesAfterSecond.map { it.id to it.updatedAt }.toSet())
+    }
+
+    // Task 13, Part 1c — the two-weeks-closed case. A 20-day arc opened for
+    // the first time on day 16: p25/p50/p75 were all crossed while the app
+    // was closed. reconcile() must date each milestone row at its exact
+    // crossing day (R12, amended), never at the open date — this is the
+    // whole reason 12d amended R12. Also documents what the user sees: three
+    // cards (start is excluded), oldest first.
+    @Test
+    fun `milestones crossed while the app was closed are dated at their crossing day, not the open date`() = runTest {
+        val open = LocalDate.of(2026, 9, 16)
+        val clock = FakeClock(LocalDateTime.of(open, LocalTime.of(10, 0)))
+        val repository = ArcRepository(
+            database.arcDao(),
+            database.commitmentDao(),
+            database.dayDao(),
+            database.entryDao(),
+            database.milestoneDao(),
+            clock,
+        )
+        val createResult = repository.createArc(
+            name = "Closed For Two Weeks",
+            startDate = LocalDate.of(2026, 9, 1),
+            endDate = LocalDate.of(2026, 9, 20),
+            strictness = Strictness.CHILL,
+            restTokensPerWeek = 0,
+            backfillDays = 2,
+            dayBoundaryHour = 4,
+            commitments = emptyList(),
+        )
+        val arcId = (createResult as CreateArcResult.Created).arcId
+
+        repository.reconcile(arcId)
+
+        val byKind = database.milestoneDao().observeByArc(arcId).first().associateBy { it.kind }
+        // final is NOT required yet — the arc is still active on day 16.
+        assertEquals(setOf("start", "p25", "p50", "p75"), byKind.keys)
+        // Each row's triggered_on_date is its crossing day, not 2026-09-16.
+        assertEquals("2026-09-01", byKind.getValue("start").triggeredOnDate)
+        assertEquals("2026-09-05", byKind.getValue("p25").triggeredOnDate)
+        assertEquals("2026-09-10", byKind.getValue("p50").triggeredOnDate)
+        assertEquals("2026-09-15", byKind.getValue("p75").triggeredOnDate)
+
+        // What the user sees: three cards (start excluded), oldest first.
+        val pending = repository.observePendingMilestones(arcId).first()
+        assertEquals(listOf(MilestoneKind.P25, MilestoneKind.P50, MilestoneKind.P75), pending.map { it.kind })
+        assertEquals(
+            listOf(LocalDate.of(2026, 9, 5), LocalDate.of(2026, 9, 10), LocalDate.of(2026, 9, 15)),
+            pending.map { it.triggeredOnDate },
+        )
+    }
+
+    // Task 13, Part 1a — remix. Every copied commitment must get a FRESH
+    // uuid (reusing the source's id would make the source's entries point at
+    // the new arc's commitment), remixed_from_arc_id must be set, and nothing
+    // else — days, entries, milestones — may be copied. The source arc must
+    // be untouched. Checked against the database, not the code.
+    @Test
+    fun `remix creates a new arc with fresh commitment ids and remixed_from set, copying nothing else`() = runTest {
+        val clock = FakeClock(LocalDateTime.of(LocalDate.of(2026, 9, 16), LocalTime.of(10, 0)))
+        val repository = ArcRepository(
+            database.arcDao(),
+            database.commitmentDao(),
+            database.dayDao(),
+            database.entryDao(),
+            database.milestoneDao(),
+            clock,
+        )
+        // Source: a STRICT arc that missed day one (sealed by day 16), so it
+        // fails on reconcile and stops being active — remix is only offered on
+        // a failed arc, and R15 would block createArc() if it were still active.
+        val sourceResult = repository.createArc(
+            name = "Original",
+            startDate = LocalDate.of(2026, 9, 1),
+            endDate = LocalDate.of(2026, 9, 30),
+            strictness = Strictness.STRICT,
+            restTokensPerWeek = 0,
+            backfillDays = 2,
+            dayBoundaryHour = 4,
+            commitments = listOf(
+                NewCommitment(name = "Gym", type = CommitmentType.BINARY, isRequired = true, scheduleType = ScheduleType.DAILY),
+            ),
+        )
+        val sourceId = (sourceResult as CreateArcResult.Created).arcId
+        val sourceCommitmentId = database.commitmentDao().observeByArc(sourceId).first().single().id
+        // Give the source real history so we can prove it is not copied.
+        repository.recordEntry(sourceId, LocalDate.of(2026, 9, 10), sourceCommitmentId, 1.0)
+        repository.reconcile(sourceId)
+        assertEquals("failed", requireNotNull(database.arcDao().observeById(sourceId).first()).status)
+
+        // Remix along the same path CreateArcViewModel uses: getRemixSource()
+        // then createArc(remixedFromArcId = source).
+        val remixSource = requireNotNull(repository.getRemixSource(sourceId))
+        val remixResult = repository.createArc(
+            name = remixSource.name,
+            startDate = LocalDate.of(2026, 9, 16),
+            endDate = LocalDate.of(2026, 10, 15),
+            strictness = Strictness.STRICT,
+            restTokensPerWeek = 0,
+            backfillDays = 2,
+            dayBoundaryHour = 4,
+            commitments = remixSource.commitments,
+            remixedFromArcId = sourceId,
+        )
+        val remixId = (remixResult as CreateArcResult.Created).arcId
+
+        val remixArc = requireNotNull(database.arcDao().observeById(remixId).first())
+        assertEquals(sourceId, remixArc.remixedFromArcId)
+        assertEquals("Original", remixArc.name)
+
+        val remixCommitment = database.commitmentDao().observeByArc(remixId).first().single()
+        assertEquals("Gym", remixCommitment.name)
+        assertNotEquals(sourceCommitmentId, remixCommitment.id)
+
+        // Nothing else copied onto the remix.
+        assertEquals(emptyList<Any>(), database.dayDao().observeByArc(remixId).first())
+        assertEquals(emptyList<Any>(), database.milestoneDao().observeByArc(remixId).first())
+
+        // Source untouched: still failed, still carries its own day + milestones.
+        assertEquals("failed", requireNotNull(database.arcDao().observeById(sourceId).first()).status)
+        assertTrue(database.dayDao().observeByArc(sourceId).first().isNotEmpty())
+        assertTrue(database.milestoneDao().observeByArc(sourceId).first().isNotEmpty())
     }
 
     private suspend fun recordDay(

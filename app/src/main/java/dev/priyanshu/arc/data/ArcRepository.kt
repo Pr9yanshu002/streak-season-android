@@ -4,6 +4,7 @@ import dev.priyanshu.arc.data.dao.ArcDao
 import dev.priyanshu.arc.data.dao.CommitmentDao
 import dev.priyanshu.arc.data.dao.DayDao
 import dev.priyanshu.arc.data.dao.EntryDao
+import dev.priyanshu.arc.data.dao.MilestoneDao
 import dev.priyanshu.arc.data.entity.ArcEntity
 import dev.priyanshu.arc.data.entity.CommitmentEntity
 import dev.priyanshu.arc.data.entity.DayEntity
@@ -14,6 +15,7 @@ import dev.priyanshu.arc.domain.model.Commitment
 import dev.priyanshu.arc.domain.model.CommitmentType
 import dev.priyanshu.arc.domain.model.Day
 import dev.priyanshu.arc.domain.model.Entry
+import dev.priyanshu.arc.domain.model.MilestoneKind
 import dev.priyanshu.arc.domain.model.ScheduleType
 import dev.priyanshu.arc.domain.model.Strictness
 import dev.priyanshu.arc.domain.rules.RulesEngine
@@ -70,11 +72,30 @@ sealed interface CreateArcResult {
     data object ActiveArcExists : CreateArcResult
 }
 
+// A stored, unacknowledged milestone (R12) — the app's view of a milestones
+// row, not RulesEngine's dated map. triggeredOnDate is always non-null here:
+// every row this app writes comes from reconcile()'s upsert, which always
+// supplies one.
+data class PendingMilestone(
+    val id: String,
+    val kind: MilestoneKind,
+    val triggeredOnDate: LocalDate,
+)
+
+// What the create flow needs to pre-fill a remix (docs/tasks/12: "pre-filled
+// from the failed arc's name, commitments and rules, with fresh dates" —
+// intention and dates are deliberately excluded, so they're not here).
+data class RemixSource(
+    val name: String,
+    val commitments: List<NewCommitment>,
+)
+
 class ArcRepository(
     private val arcDao: ArcDao,
     private val commitmentDao: CommitmentDao,
     private val dayDao: DayDao,
     private val entryDao: EntryDao,
+    private val milestoneDao: MilestoneDao,
     private val clock: Clock,
 ) {
     private fun observeSnapshot(arcId: String): Flow<ArcSnapshot> =
@@ -119,6 +140,49 @@ class ArcRepository(
     suspend fun getCommitments(arcId: String): List<Commitment> =
         commitmentDao.observeByArc(arcId).first().map { it.toDomain() }
 
+    // Remix (R9) pre-fill source. Reads CommitmentEntity directly rather than
+    // through getCommitments()/Commitment — icon has no domain-model
+    // equivalent (Commitment.kt trims it as UI-only), and NewCommitment is
+    // exactly the shape createArc() needs, so building it here skips a
+    // round-trip through the trimmed domain model and back.
+    suspend fun getRemixSource(arcId: String): RemixSource? {
+        val arc = arcDao.observeById(arcId).first() ?: return null
+        val commitments = commitmentDao.observeByArc(arcId).first().map { c ->
+            NewCommitment(
+                name = c.name,
+                icon = c.icon,
+                type = CommitmentType.valueOf(c.type.uppercase()),
+                targetValue = c.targetValue,
+                unit = c.unit,
+                isRequired = c.isRequired == 1,
+                scheduleType = ScheduleType.valueOf(c.scheduleType.uppercase()),
+                scheduleDays = c.scheduleDays,
+            )
+        }
+        return RemixSource(name = arc.name, commitments = commitments)
+    }
+
+    // 'start' is excluded (docs/tasks/12) — it anchors the recap's timeline,
+    // not a card the user dismisses.
+    fun observePendingMilestones(arcId: String): Flow<List<PendingMilestone>> =
+        milestoneDao.observePendingByArc(arcId).map { entities ->
+            entities.map { entity ->
+                PendingMilestone(
+                    id = entity.id,
+                    kind = MilestoneKind.valueOf(entity.kind.uppercase()),
+                    triggeredOnDate = LocalDate.parse(
+                        requireNotNull(entity.triggeredOnDate) {
+                            "milestone ${entity.id} has no triggered_on_date"
+                        }
+                    ),
+                )
+            }
+        }
+
+    suspend fun acknowledgeMilestone(milestoneId: String, reflection: String?) {
+        milestoneDao.acknowledge(milestoneId, reflection?.trim()?.ifBlank { null }, clock.millis())
+    }
+
     suspend fun createArc(
         name: String,
         startDate: LocalDate,
@@ -128,6 +192,7 @@ class ArcRepository(
         backfillDays: Int,
         dayBoundaryHour: Int,
         commitments: List<NewCommitment>,
+        remixedFromArcId: String? = null,
     ): CreateArcResult {
         // R15 — at most one active arc at a time. A condition the user can
         // genuinely reach, so it's reported, not thrown.
@@ -147,6 +212,7 @@ class ArcRepository(
                 restTokensPerWeek = restTokensPerWeek,
                 backfillDays = backfillDays,
                 dayBoundaryHour = dayBoundaryHour,
+                remixedFromArcId = remixedFromArcId,
                 createdAt = now,
                 updatedAt = now,
             )
@@ -215,6 +281,43 @@ class ArcRepository(
         dayDao.upsert(UUID.randomUUID().toString(), arcId, date.toString(), now)
         return requireNotNull(dayDao.getByArcAndDate(arcId, date.toString())) {
             "day upsert for arc=$arcId date=$date did not produce a row"
+        }
+    }
+
+    // R9/R10/R12 — persists the engine's derived arcStatus once it no longer
+    // matches the stored row, and inserts whichever required milestone kinds
+    // aren't stored yet. Idempotent by construction: updateStatusIfChanged's
+    // WHERE clause only writes when status actually differs, and milestones
+    // are only inserted for kinds missing from the observed set — so calling
+    // this twice in a row (ViewModel init + onResume both call it) produces
+    // at most one status write and one row per newly-required kind.
+    suspend fun reconcile(arcId: String) {
+        val resolution = observeResolution(arcId).first()
+        val now = clock.millis()
+
+        arcDao.updateStatusIfChanged(
+            arcId = arcId,
+            status = resolution.arcStatus.name.lowercase(),
+            completedAt = if (resolution.arcStatus == ArcStatus.COMPLETED) now else null,
+            failedOnDate = resolution.failedOnDate?.toString(),
+            now = now,
+        )
+
+        val existingKinds = milestoneDao.observeByArc(arcId).first().map { it.kind }.toSet()
+        resolution.requiredMilestones.forEach { (kind, triggeredOnDate) ->
+            val wireKind = kind.name.lowercase()
+            if (wireKind !in existingKinds) {
+                milestoneDao.upsert(
+                    id = UUID.randomUUID().toString(),
+                    arcId = arcId,
+                    kind = wireKind,
+                    // The engine's exact crossing date (R12, amended) — never
+                    // resolution.effectiveToday, which is when the app
+                    // happened to notice, not when the threshold was crossed.
+                    triggeredOnDate = triggeredOnDate.toString(),
+                    now = now,
+                )
+            }
         }
     }
 }

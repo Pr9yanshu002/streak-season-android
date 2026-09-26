@@ -28,16 +28,18 @@ val clockModule = module {
 }
 
 val repositoryModule = module {
-    single { ArcRepository(get(), get(), get(), get(), get()) }
+    single { ArcRepository(get(), get(), get(), get(), get(), get()) }
 }
 
 val debugModule = module {
-    single { DebugSeeder(get(), get()) }
+    single { DebugSeeder(get(), get(), get()) }
 }
 
 val uiModule = module {
     viewModel { TodayViewModel(get(), get()) }
-    viewModel { CreateArcViewModel(get(), get()) }
+    // remixFromArcId (docs/tasks/12): null for a plain "start an arc", the
+    // source arc's id when opened via Remix.
+    viewModel { (remixFromArcId: String?) -> CreateArcViewModel(get(), get(), remixFromArcId) }
 }
 
 val appModules = listOf(databaseModule, clockModule, repositoryModule, debugModule, uiModule)

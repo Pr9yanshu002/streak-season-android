@@ -40,7 +40,14 @@ class ArcRepositoryWriteRaceTest {
             .allowMainThreadQueries()
             .build()
         val clock = FakeClock(LocalDateTime.of(today, LocalTime.of(10, 0)))
-        repository = ArcRepository(database.arcDao(), database.commitmentDao(), database.dayDao(), database.entryDao(), clock)
+        repository = ArcRepository(
+            database.arcDao(),
+            database.commitmentDao(),
+            database.dayDao(),
+            database.entryDao(),
+            database.milestoneDao(),
+            clock,
+        )
 
         val result = repository.createArc(
             name = "Race Arc",

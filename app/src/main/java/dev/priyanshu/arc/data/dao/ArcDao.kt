@@ -21,4 +21,20 @@ interface ArcDao {
     // Today screen, no arc list yet), so "the active arc" is unambiguous.
     @Query("SELECT id FROM arcs WHERE status = 'active' AND deleted_at IS NULL ORDER BY created_at LIMIT 1")
     suspend fun getActiveArcId(): String?
+
+    @Query("""
+    UPDATE arcs
+    SET status = :status,
+        completed_at = :completedAt,
+        failed_on_date = :failedOnDate,
+        updated_at = :now
+    WHERE id = :arcId AND status != :status
+""")
+    suspend fun updateStatusIfChanged(
+        arcId: String,
+        status: String,
+        completedAt: Long?,
+        failedOnDate: String?,
+        now: Long,
+    ): Int
 }
