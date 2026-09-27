@@ -16,6 +16,10 @@ local.properties
 *.jks
 *.keystore
 keystore.properties
+# ...except the shared debug keystore: it must be committed so every build
+# (CI included) signs with the same key and installs over the last without an
+# uninstall (which would wipe the Room DB). Debug creds are standard, not secret.
+!app/debug.keystore
 
 # Environment
 .env
