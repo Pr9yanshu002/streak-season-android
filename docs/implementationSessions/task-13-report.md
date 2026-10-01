@@ -159,3 +159,24 @@ otherwise touched.)
 One issue to decide on: **remix does not carry the source arc's rule set**
 (strictness / rest tokens / backfill / day-boundary). Everything else in Part 1
 behaves as specified.
+
+---
+
+## Follow-up — 1a gap fixed
+
+After the verification above, the 1a gap was closed (this is a code change, no
+longer verification-only):
+
+- `RemixSource` now carries `strictness`, `restTokensPerWeek`, `backfillDays`
+  and `dayBoundaryHour`, and `getRemixSource()` reads them off the source arc.
+- `CreateArcViewModel`'s remix pre-fill seeds all four into the create state.
+  They remain editable on step 3 — the existing `RulesAndIntentionStep`
+  controls are wired to the same setters, so pre-fill only seeds them.
+- `CreateArcViewModelTest` gains two tests on the real user path (open remix →
+  pre-fill → `begin()` → read the persisted arc): one asserts the whole rule
+  set survives into the created arc using all-non-default source values (so it
+  fails if any field stops being copied), the other asserts the fields stay
+  editable after pre-fill. Both were confirmed to fail when the pre-fill copy is
+  removed, then pass once restored.
+
+`:domain:test` and `:app:testDebugUnitTest` remain green.

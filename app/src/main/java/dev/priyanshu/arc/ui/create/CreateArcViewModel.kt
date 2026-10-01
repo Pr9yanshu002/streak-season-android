@@ -127,7 +127,9 @@ class CreateArcViewModel(
         )
         state = _state.asStateFlow()
 
-        // Remix (R9): pre-fill name and commitments from the failed arc.
+        // Remix (R9): pre-fill name, commitments and the rule set from the
+        // failed arc, so the retry starts from the same rules it ran under.
+        // The rule fields stay editable on step 3 — this only seeds them.
         // Dates always start fresh (today..+59, set above) and intention is
         // deliberately left blank — the user writes a new one, not the old
         // one (docs/tasks/12).
@@ -135,7 +137,14 @@ class CreateArcViewModel(
             viewModelScope.launch {
                 val source = repository.getRemixSource(sourceArcId) ?: return@launch
                 _state.update {
-                    it.copy(name = source.name, commitments = source.commitments.map { c -> c.toDraft() })
+                    it.copy(
+                        name = source.name,
+                        commitments = source.commitments.map { c -> c.toDraft() },
+                        strictness = source.strictness,
+                        restTokensPerWeek = source.restTokensPerWeek,
+                        backfillDays = source.backfillDays,
+                        dayBoundaryHour = source.dayBoundaryHour,
+                    )
                 }
             }
         }
