@@ -45,6 +45,21 @@ android {
             isIncludeAndroidResources = true
         }
     }
+
+    signingConfigs {
+        // A committed, stable debug keystore (not Gradle's per-machine
+        // auto-generated ~/.android/debug.keystore). Every CI-built debug APK
+        // is then signed with the same key, so it installs over the previous
+        // one instead of forcing an uninstall — which would wipe the Room DB
+        // and the live arc. Standard debug credentials, so not a secret;
+        // release signing is separate and never committed.
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
 }
 
 ksp {
