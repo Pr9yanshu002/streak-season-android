@@ -83,11 +83,18 @@ data class PendingMilestone(
 )
 
 // What the create flow needs to pre-fill a remix (docs/tasks/12: "pre-filled
-// from the failed arc's name, commitments and rules, with fresh dates" —
-// intention and dates are deliberately excluded, so they're not here).
+// from the failed arc's name, commitments and rules, with fresh dates").
+// "Rules" is the arc's whole rule set — strictness plus the three numeric
+// knobs — so a remix starts from the same rules the source ran under, not the
+// create flow's defaults. Intention and dates are deliberately excluded (the
+// user writes a fresh intention and gets fresh dates), so they're not here.
 data class RemixSource(
     val name: String,
     val commitments: List<NewCommitment>,
+    val strictness: Strictness,
+    val restTokensPerWeek: Int,
+    val backfillDays: Int,
+    val dayBoundaryHour: Int,
 )
 
 class ArcRepository(
@@ -159,7 +166,14 @@ class ArcRepository(
                 scheduleDays = c.scheduleDays,
             )
         }
-        return RemixSource(name = arc.name, commitments = commitments)
+        return RemixSource(
+            name = arc.name,
+            commitments = commitments,
+            strictness = Strictness.valueOf(arc.strictness.uppercase()),
+            restTokensPerWeek = arc.restTokensPerWeek,
+            backfillDays = arc.backfillDays,
+            dayBoundaryHour = arc.dayBoundaryHour,
+        )
     }
 
     // 'start' is excluded (docs/tasks/12) — it anchors the recap's timeline,

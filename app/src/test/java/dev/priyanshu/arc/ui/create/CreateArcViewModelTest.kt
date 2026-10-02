@@ -13,6 +13,7 @@ import dev.priyanshu.arc.domain.model.Strictness
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -179,5 +180,112 @@ class CreateArcViewModelTest {
         assertTrue(state.intention.isBlank())
         assertEquals(today, state.startDate)
         assertEquals(today.plusDays(59), state.endDate)
+    }
+
+    // Task 13, Part 1a gap — remix must also carry the source arc's whole rule
+    // set (strictness + the three numeric knobs), not just name + commitments.
+    // This drives the exact path the user takes: open the remix
+    // (CreateArcViewModel(remixFromArcId = ...)) -> pre-fill -> Begin
+    // (begin()/createArc) -> read the persisted arc back. Every source value is
+    // deliberately NON-default (create-flow defaults are STANDARD/1/2/4), so if
+    // the pre-fill ever stops copying a field the created arc falls back to the
+    // default and the matching assertion fails.
+    @Test
+    fun `remix carries the whole rule set through begin into the created arc`() = runTest {
+        val clock = FakeClock(LocalDateTime.of(today, LocalTime.of(10, 0)))
+        val repository = ArcRepository(
+            database.arcDao(),
+            database.commitmentDao(),
+            database.dayDao(),
+            database.entryDao(),
+            database.milestoneDao(),
+            clock,
+        )
+        // STRICT source that misses day one (sealed long ago, backfill 5), so
+        // it fails on reconcile and stops being active — remix is only offered
+        // on a failed arc, and R15 would block begin() if it were still active.
+        val sourceResult = repository.createArc(
+            name = "Original",
+            startDate = today.minusDays(30),
+            endDate = today.plusDays(20),
+            strictness = Strictness.STRICT,
+            restTokensPerWeek = 3,
+            backfillDays = 5,
+            dayBoundaryHour = 6,
+            commitments = listOf(
+                NewCommitment(name = "Gym", type = CommitmentType.BINARY, isRequired = true, scheduleType = ScheduleType.DAILY),
+            ),
+        )
+        val sourceId = (sourceResult as CreateArcResult.Created).arcId
+        repository.reconcile(sourceId)
+        assertEquals("failed", requireNotNull(database.arcDao().observeById(sourceId).first()).status)
+
+        val remixViewModel = CreateArcViewModel(repository, clock, remixFromArcId = sourceId)
+        val prefilled = remixViewModel.state.first { it.name == "Original" }
+
+        // Pre-fill carries every rule field (not just name + commitments).
+        assertEquals(Strictness.STRICT, prefilled.strictness)
+        assertEquals(3, prefilled.restTokensPerWeek)
+        assertEquals(5, prefilled.backfillDays)
+        assertEquals(6, prefilled.dayBoundaryHour)
+
+        // Begin along the real path and read the persisted arc back.
+        val created = CompletableDeferred<Unit>()
+        remixViewModel.begin(onCreated = { created.complete(Unit) })
+        created.await()
+
+        val newArcId = requireNotNull(repository.getActiveArcId())
+        val newArc = requireNotNull(database.arcDao().observeById(newArcId).first())
+        assertEquals(sourceId, newArc.remixedFromArcId)
+        assertEquals("strict", newArc.strictness)
+        assertEquals(3, newArc.restTokensPerWeek)
+        assertEquals(5, newArc.backfillDays)
+        assertEquals(6, newArc.dayBoundaryHour)
+    }
+
+    // "Keep them editable on step 3": pre-fill seeds the rule fields but must
+    // not lock them — the user can still change any of them before Begin.
+    @Test
+    fun `remixed rule fields stay editable after pre-fill`() = runTest {
+        val clock = FakeClock(LocalDateTime.of(today, LocalTime.of(10, 0)))
+        val repository = ArcRepository(
+            database.arcDao(),
+            database.commitmentDao(),
+            database.dayDao(),
+            database.entryDao(),
+            database.milestoneDao(),
+            clock,
+        )
+        val sourceResult = repository.createArc(
+            name = "Original",
+            startDate = today.minusDays(30),
+            endDate = today.plusDays(20),
+            strictness = Strictness.STRICT,
+            restTokensPerWeek = 3,
+            backfillDays = 5,
+            dayBoundaryHour = 6,
+            commitments = listOf(
+                NewCommitment(name = "Gym", type = CommitmentType.BINARY, isRequired = true, scheduleType = ScheduleType.DAILY),
+            ),
+        )
+        val sourceId = (sourceResult as CreateArcResult.Created).arcId
+        repository.reconcile(sourceId)
+
+        val remixViewModel = CreateArcViewModel(repository, clock, remixFromArcId = sourceId)
+        // Await pre-fill on name only — the pre-fill is one atomic state update,
+        // so editability must hold regardless of what the rule fields were
+        // seeded to.
+        remixViewModel.state.first { it.name == "Original" }
+
+        remixViewModel.setStrictness(Strictness.CHILL)
+        remixViewModel.setRestTokensPerWeek(1)
+        remixViewModel.setBackfillDays(0)
+        remixViewModel.setDayBoundaryHour(9)
+
+        val edited = remixViewModel.state.value
+        assertEquals(Strictness.CHILL, edited.strictness)
+        assertEquals(1, edited.restTokensPerWeek)
+        assertEquals(0, edited.backfillDays)
+        assertEquals(9, edited.dayBoundaryHour)
     }
 }

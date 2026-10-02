@@ -78,6 +78,9 @@ The engine is a synchronous function over in-memory lists.
   (e.g. `task-13-closeout-cleanup`).
 - Before starting a task: `git checkout main && git pull`, then create the branch.
 - Commit messages start with the task number: `Task 13: ...`.
+- At the end of every task, write the "Report back" section to
+  `docs/implementationSessions/task-<nn>-report.md` and commit it with the
+  task's other changes, before opening the PR.
 - Open the PR with `gh pr create --base main`. Do not merge it — Priyanshu
   reviews and merges.
 
