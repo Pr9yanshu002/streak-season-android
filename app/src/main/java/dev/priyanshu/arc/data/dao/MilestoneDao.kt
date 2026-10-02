@@ -2,6 +2,7 @@ package dev.priyanshu.arc.data.dao
 
 import androidx.room.Dao
 import androidx.room.Query
+import androidx.room.Transaction
 import dev.priyanshu.arc.data.entity.MilestoneEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -45,8 +46,24 @@ interface MilestoneDao {
     )
     fun observePendingByArc(arcId: String): Flow<List<MilestoneEntity>>
 
-    @Query(
-        "UPDATE milestones SET reflection = :reflection, acknowledged_at = :now, updated_at = :now WHERE id = :id"
-    )
-    suspend fun acknowledge(id: String, reflection: String?, now: Long)
+    // Acknowledge a whole card's worth of milestones atomically (docs/tasks/14):
+    // every id in `ids` gets acknowledged_at, and the reflection lands on
+    // reflectionMilestoneId alone — the latest milestone on the card. One
+    // @Transaction so a kill between the two writes can't leave half a summary
+    // acknowledged, which would show the leftovers as a fresh card next launch.
+    // updated_at is bumped on every row written, per the hard rules. The ids
+    // are the exact ones the card displayed (passed by the caller), not a
+    // re-query of what is pending now — a milestone that went pending while the
+    // card was on screen must not be swept away unseen.
+    @Transaction
+    suspend fun acknowledge(ids: List<String>, reflection: String?, reflectionMilestoneId: String, now: Long) {
+        acknowledgeIds(ids, now)
+        if (reflection != null) setReflection(reflectionMilestoneId, reflection, now)
+    }
+
+    @Query("UPDATE milestones SET acknowledged_at = :now, updated_at = :now WHERE id IN (:ids)")
+    suspend fun acknowledgeIds(ids: List<String>, now: Long)
+
+    @Query("UPDATE milestones SET reflection = :reflection, updated_at = :now WHERE id = :id")
+    suspend fun setReflection(id: String, reflection: String, now: Long)
 }

@@ -78,7 +78,7 @@ class TodayViewModel(
             ) { snapshot, pending -> snapshot to pending }
                 .onEach { (snapshot, pending) ->
                     _state.value = snapshot.toUiState()
-                    _pendingMilestone.value = pending.firstOrNull()?.toUiState(
+                    _pendingMilestone.value = pending.toPendingUiState(
                         arcStartDate = snapshot.arc.startDate,
                         totalDays = snapshot.resolution.totalDays,
                         arcStatus = snapshot.resolution.arcStatus,
@@ -103,8 +103,14 @@ class TodayViewModel(
     }
 
     fun acknowledgeMilestone(reflection: String?) {
-        val milestone = pendingMilestone.value ?: return
-        viewModelScope.launch { repository.acknowledgeMilestone(milestone.id, reflection) }
+        val pending = pendingMilestone.value ?: return
+        viewModelScope.launch {
+            repository.acknowledgeMilestones(
+                ids = pending.ids,
+                reflection = reflection,
+                reflectionMilestoneId = pending.reflectionTargetId,
+            )
+        }
     }
 
     fun completeBinary(commitmentId: String, done: Boolean) {
@@ -186,19 +192,45 @@ private fun TodaySnapshot.toUiState(): TodayUiState {
     )
 }
 
-// dayNumber here is plain calendar arithmetic (R2's definition: days since
-// start_date, 1-indexed) applied to a date the engine already computed
-// exactly (RulesEngine.requiredMilestones, R12 amended) — not a rule
-// decision re-derived in :app, just counting from an engine-supplied date.
-private fun PendingMilestone.toUiState(
+// Presentation choice, not a rule (docs/tasks/14): zero pending -> no card,
+// exactly one -> the task-12 Single card unchanged, two or more -> one Summary
+// listing them. The list arrives oldest-first from observePendingByArc and is
+// kept in that order — not re-sorted here.
+private fun List<PendingMilestone>.toPendingUiState(
     arcStartDate: LocalDate,
     totalDays: Int,
     arcStatus: ArcStatus,
-): PendingMilestoneUiState =
-    PendingMilestoneUiState(
-        id = id,
-        kind = kind,
-        dayNumber = ChronoUnit.DAYS.between(arcStartDate, triggeredOnDate).toInt() + 1,
-        totalDays = totalDays,
-        arcCompleted = if (kind == MilestoneKind.FINAL) arcStatus == ArcStatus.COMPLETED else null,
+): PendingMilestoneUiState? = when {
+    isEmpty() -> null
+    size == 1 -> single().let { m ->
+        PendingMilestoneUiState.Single(
+            id = m.id,
+            kind = m.kind,
+            dayNumber = m.dayNumber(arcStartDate),
+            totalDays = totalDays,
+            arcCompleted = m.arcCompleted(arcStatus),
+        )
+    }
+    else -> PendingMilestoneUiState.Summary(
+        rows = map { m ->
+            PendingMilestoneUiState.Summary.Row(
+                id = m.id,
+                kind = m.kind,
+                dayNumber = m.dayNumber(arcStartDate),
+                totalDays = totalDays,
+                triggeredOnDate = m.triggeredOnDate,
+                arcCompleted = m.arcCompleted(arcStatus),
+            )
+        },
     )
+}
+
+// dayNumber is plain calendar arithmetic (R2's definition: days since
+// start_date, 1-indexed) applied to a date the engine already computed exactly
+// (RulesEngine.requiredMilestones, R12 amended) — not a rule decision
+// re-derived in :app, just counting from an engine-supplied date.
+private fun PendingMilestone.dayNumber(arcStartDate: LocalDate): Int =
+    ChronoUnit.DAYS.between(arcStartDate, triggeredOnDate).toInt() + 1
+
+private fun PendingMilestone.arcCompleted(arcStatus: ArcStatus): Boolean? =
+    if (kind == MilestoneKind.FINAL) arcStatus == ArcStatus.COMPLETED else null

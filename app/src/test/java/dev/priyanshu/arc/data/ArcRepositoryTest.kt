@@ -20,6 +20,8 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -332,6 +334,99 @@ class ArcRepositoryTest {
         assertEquals("failed", requireNotNull(database.arcDao().observeById(sourceId).first()).status)
         assertTrue(database.dayDao().observeByArc(sourceId).first().isNotEmpty())
         assertTrue(database.milestoneDao().observeByArc(sourceId).first().isNotEmpty())
+    }
+
+    // Task 14 — acknowledging a summary card must clear exactly the ids shown
+    // and no others. A milestone not in the acknowledged set (here p75, as if
+    // it had only just gone pending while the card was on screen) stays
+    // pending, so the user still sees it next time.
+    @Test
+    fun `acknowledging a set of ids clears exactly those, leaving the rest pending`() = runTest {
+        val clock = FakeClock(LocalDateTime.of(LocalDate.of(2026, 9, 16), LocalTime.of(10, 0)))
+        val repository = ArcRepository(
+            database.arcDao(),
+            database.commitmentDao(),
+            database.dayDao(),
+            database.entryDao(),
+            database.milestoneDao(),
+            clock,
+        )
+        val arcId = createTwoWeeksClosedArc(repository)
+        repository.reconcile(arcId)
+
+        val pending = repository.observePendingMilestones(arcId).first()
+        assertEquals(listOf(MilestoneKind.P25, MilestoneKind.P50, MilestoneKind.P75), pending.map { it.kind })
+        val p25 = pending[0]
+        val p50 = pending[1]
+        val p75 = pending[2]
+
+        // Acknowledge only p25 and p50 — reflection on the later of the two.
+        repository.acknowledgeMilestones(
+            ids = listOf(p25.id, p50.id),
+            reflection = null,
+            reflectionMilestoneId = p50.id,
+        )
+
+        val stillPending = repository.observePendingMilestones(arcId).first()
+        assertEquals(listOf(MilestoneKind.P75), stillPending.map { it.kind })
+        assertEquals(p75.id, stillPending.single().id)
+
+        val byId = database.milestoneDao().observeByArc(arcId).first().associateBy { it.id }
+        assertNotNull(byId.getValue(p25.id).acknowledgedAt)
+        assertNotNull(byId.getValue(p50.id).acknowledgedAt)
+        assertNull(byId.getValue(p75.id).acknowledgedAt)
+    }
+
+    // Task 14 — the one reflection on a summary card is saved on the latest
+    // milestone only (latest triggered_on_date) and nowhere else: a reflection
+    // typed on day 16 is not a day-5 reflection.
+    @Test
+    fun `reflection lands on the latest milestone and nowhere else`() = runTest {
+        val clock = FakeClock(LocalDateTime.of(LocalDate.of(2026, 9, 16), LocalTime.of(10, 0)))
+        val repository = ArcRepository(
+            database.arcDao(),
+            database.commitmentDao(),
+            database.dayDao(),
+            database.entryDao(),
+            database.milestoneDao(),
+            clock,
+        )
+        val arcId = createTwoWeeksClosedArc(repository)
+        repository.reconcile(arcId)
+
+        val pending = repository.observePendingMilestones(arcId).first()
+        val latest = pending.last() // p75, latest triggered_on_date
+
+        repository.acknowledgeMilestones(
+            ids = pending.map { it.id },
+            reflection = "  Kept going even after the slow week.  ",
+            reflectionMilestoneId = latest.id,
+        )
+
+        val byId = database.milestoneDao().observeByArc(arcId).first().associateBy { it.id }
+        // Trimmed, on the latest only.
+        assertEquals("Kept going even after the slow week.", byId.getValue(latest.id).reflection)
+        pending.filter { it.id != latest.id }.forEach { assertNull(byId.getValue(it.id).reflection) }
+        // Every one shown was acknowledged.
+        pending.forEach { assertNotNull(byId.getValue(it.id).acknowledgedAt) }
+    }
+
+    // start 2026-09-01 .. end 2026-09-20, opened on 2026-09-16: p25/p50/p75 all
+    // crossed (days 5/10/15), final not yet. CHILL so the arc stays active and
+    // never fails out from under the test. Same scenario as the two-weeks-closed
+    // reconcile test above.
+    private suspend fun createTwoWeeksClosedArc(repository: ArcRepository): String {
+        val result = repository.createArc(
+            name = "Closed For Two Weeks",
+            startDate = LocalDate.of(2026, 9, 1),
+            endDate = LocalDate.of(2026, 9, 20),
+            strictness = Strictness.CHILL,
+            restTokensPerWeek = 0,
+            backfillDays = 2,
+            dayBoundaryHour = 4,
+            commitments = emptyList(),
+        )
+        return (result as CreateArcResult.Created).arcId
     }
 
     private suspend fun recordDay(

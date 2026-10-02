@@ -193,8 +193,17 @@ class ArcRepository(
             }
         }
 
-    suspend fun acknowledgeMilestone(milestoneId: String, reflection: String?) {
-        milestoneDao.acknowledge(milestoneId, reflection?.trim()?.ifBlank { null }, clock.millis())
+    // Acknowledge exactly `ids` in one transaction, saving the (trimmed)
+    // optional reflection on reflectionMilestoneId only — the latest milestone
+    // on the card (docs/tasks/14). The ids are the ones the card displayed, so
+    // a milestone that went pending while the card was up is left untouched.
+    suspend fun acknowledgeMilestones(ids: List<String>, reflection: String?, reflectionMilestoneId: String) {
+        milestoneDao.acknowledge(
+            ids = ids,
+            reflection = reflection?.trim()?.ifBlank { null },
+            reflectionMilestoneId = reflectionMilestoneId,
+            now = clock.millis(),
+        )
     }
 
     suspend fun createArc(
