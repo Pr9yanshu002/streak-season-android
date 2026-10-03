@@ -129,7 +129,7 @@ a pre-filled start date that falls outside the new window.
 
 ## Report back
 
-Write to `docs/implementationSessions/task-15-report.md` and commit it with the
+Write to `docs/implementationSessions/task-14-report.md` and commit it with the
 task, per `CLAUDE.md`.
 
 - Screens: what the summary card shows for three pending milestones, and for the

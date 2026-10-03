@@ -1,10 +1,9 @@
 # Task 14 — collapse catch-up milestone cards — report
 
-> Filename note: the brief's "Report back" section names this file
-> `task-15-report.md`, so that is where it lives, but the task and branch are
-> **14** (`task-14-collapse-milestone-cards`). This looks like a typo in the
-> brief; flagging it rather than silently renaming. Happy to move it to
-> `task-14-report.md` if that was the intent.
+> Filename note: the brief's "Report back" section named this file
+> `task-15-report.md`, but the task and branch are **14**
+> (`task-14-collapse-milestone-cards`), so it has been renamed to
+> `task-14-report.md` to match. The brief's reference has been corrected too.
 
 ## Part 1 — the summary card
 
