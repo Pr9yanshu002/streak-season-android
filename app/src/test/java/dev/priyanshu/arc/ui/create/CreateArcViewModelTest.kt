@@ -288,4 +288,58 @@ class CreateArcViewModelTest {
         assertEquals(0, edited.backfillDays)
         assertEquals(9, edited.dayBoundaryHour)
     }
+
+    // Task 14, Part 2 — the pre-filled backfill_days must flow into R16's
+    // earliest-start boundary, not the create-flow default of 2. A source with
+    // backfill 5 moves the earliest start to today - 5, and the step-1 /
+    // step-3 start-date re-validation must use that window, so a start date
+    // before it is still flagged.
+    @Test
+    fun `remixed backfill_days moves the R16 earliest start date and re-validation uses it`() = runTest {
+        val clock = FakeClock(LocalDateTime.of(today, LocalTime.of(10, 0)))
+        val repository = ArcRepository(
+            database.arcDao(),
+            database.commitmentDao(),
+            database.dayDao(),
+            database.entryDao(),
+            database.milestoneDao(),
+            clock,
+        )
+        val sourceResult = repository.createArc(
+            name = "Original",
+            startDate = today.minusDays(30),
+            endDate = today.plusDays(20),
+            strictness = Strictness.STRICT,
+            restTokensPerWeek = 3,
+            backfillDays = 5,
+            dayBoundaryHour = 6,
+            commitments = listOf(
+                NewCommitment(name = "Gym", type = CommitmentType.BINARY, isRequired = true, scheduleType = ScheduleType.DAILY),
+            ),
+        )
+        val sourceId = (sourceResult as CreateArcResult.Created).arcId
+        repository.reconcile(sourceId)
+
+        val remixViewModel = CreateArcViewModel(repository, clock, remixFromArcId = sourceId)
+        val prefilled = remixViewModel.state.first { it.name == "Original" }
+
+        // Pre-filled backfill 5 -> earliest start is today - 5, not today - 2.
+        assertEquals(5, prefilled.backfillDays)
+        assertEquals(today.minusDays(5), prefilled.earliestAllowedStartDate)
+
+        // A start one day before the (wider) window is still flagged on both
+        // the step-1 and step-3 checks.
+        remixViewModel.setStartDate(today.minusDays(6))
+        val outside = remixViewModel.state.value
+        assertNotNull(outside.startDateError)
+        assertNotNull(outside.step3Error)
+
+        // The edge of the window is accepted; a date valid only under the
+        // default backfill-2 window (today - 5 .. today - 3) is accepted too,
+        // confirming the wider source window is the one in force.
+        remixViewModel.setStartDate(today.minusDays(5))
+        assertNull(remixViewModel.state.value.startDateError)
+        remixViewModel.setStartDate(today.minusDays(4))
+        assertNull(remixViewModel.state.value.startDateError)
+    }
 }

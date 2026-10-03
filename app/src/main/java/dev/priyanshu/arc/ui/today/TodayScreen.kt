@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
@@ -45,6 +47,7 @@ import dev.priyanshu.arc.domain.model.DayState
 import dev.priyanshu.arc.domain.model.MilestoneKind
 import dev.priyanshu.arc.ui.theme.StreakSeasonTheme
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
@@ -97,12 +100,20 @@ fun TodayScreen(
     onRemix: (sourceArcId: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // A pending milestone takes over the whole screen (docs/tasks/12) —
-    // shown instead of whatever `state` would otherwise render, checked
-    // first regardless of which TodayUiState we're in.
-    if (pendingMilestone != null) {
-        MilestoneCard(milestone = pendingMilestone, onAcknowledge = onAcknowledgeMilestone, modifier = modifier)
-        return
+    // A pending milestone takes over the whole screen (docs/tasks/12) — shown
+    // instead of whatever `state` would otherwise render, checked first
+    // regardless of which TodayUiState we're in. One pending shows the
+    // original card; two or more collapse into a single summary (docs/tasks/14).
+    when (pendingMilestone) {
+        is PendingMilestoneUiState.Single -> {
+            MilestoneCard(milestone = pendingMilestone, onAcknowledge = onAcknowledgeMilestone, modifier = modifier)
+            return
+        }
+        is PendingMilestoneUiState.Summary -> {
+            MilestoneSummaryCard(summary = pendingMilestone, onAcknowledge = onAcknowledgeMilestone, modifier = modifier)
+            return
+        }
+        null -> Unit
     }
 
     when (state) {
@@ -202,11 +213,11 @@ private fun TodayContent(
 
 // Full-screen, stock Material 3 (docs/tasks/12) — no animation, no photo
 // picker. The reflection field is optional: an empty/blank value is passed
-// through as null (ArcRepository.acknowledgeMilestone trims it anyway, but
+// through as null (ArcRepository.acknowledgeMilestones trims it anyway, but
 // keeping that decision visible here matches LogControl's commit()).
 @Composable
 private fun MilestoneCard(
-    milestone: PendingMilestoneUiState,
+    milestone: PendingMilestoneUiState.Single,
     onAcknowledge: (reflection: String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -234,16 +245,76 @@ private fun MilestoneCard(
     }
 }
 
+// Shown when two or more milestones are pending at once (docs/tasks/14) — one
+// card lists them oldest-first instead of a stack of full-screen cards. Copy
+// is neutral: "You've passed N milestones." stays true whether or not there
+// was an absence (two can go pending while the app was only briefly closed, or
+// never closed at all). The single optional reflection is saved on the latest
+// milestone (handled by acknowledge via reflectionTargetId). Scrolls because
+// four rows plus the field plus the keyboard can overflow a short screen.
+@Composable
+private fun MilestoneSummaryCard(
+    summary: PendingMilestoneUiState.Summary,
+    onAcknowledge: (reflection: String?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var reflection by remember(summary.ids) { mutableStateOf("") }
+    Column(
+        modifier = modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            "You've passed ${summary.rows.size} milestones.",
+            style = MaterialTheme.typography.headlineMedium,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(16.dp))
+        summary.rows.forEach { row ->
+            Text(
+                "${row.shortLabel()} — day ${row.dayNumber} of ${row.totalDays}, " +
+                    row.triggeredOnDate.format(MILESTONE_DATE_FORMAT),
+                style = MaterialTheme.typography.bodyLarge,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+        Spacer(Modifier.height(24.dp))
+        OutlinedTextField(
+            value = reflection,
+            onValueChange = { reflection = it },
+            label = { Text("Reflection (optional)") },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(24.dp))
+        Button(onClick = { onAcknowledge(reflection.trim().ifBlank { null }) }) { Text("Continue") }
+    }
+}
+
 // FINAL fires on either completion or failure (R10) — arcCompleted picks
 // which of the two this actually is; it's only ever null for the other
 // kinds, which don't need the distinction.
-private fun PendingMilestoneUiState.label(): String = when (kind) {
+private fun PendingMilestoneUiState.Single.label(): String = when (kind) {
     MilestoneKind.START -> "You're underway"
     MilestoneKind.P25 -> "A quarter of the way there"
     MilestoneKind.P50 -> "Halfway there"
     MilestoneKind.P75 -> "Three quarters there"
     MilestoneKind.FINAL -> if (arcCompleted == true) "Arc complete" else "Arc ended"
 }
+
+// Short form for a summary row — the long sentences read as a list of one-liners
+// here. START never reaches a card (observePendingByArc excludes it); FINAL
+// splits the same way label() does.
+private fun PendingMilestoneUiState.Summary.Row.shortLabel(): String = when (kind) {
+    MilestoneKind.START -> "Underway"
+    MilestoneKind.P25 -> "A quarter"
+    MilestoneKind.P50 -> "Halfway"
+    MilestoneKind.P75 -> "Three quarters"
+    MilestoneKind.FINAL -> if (arcCompleted == true) "Arc complete" else "Arc ended"
+}
+
+// "10 Sep" — the crossing date, read from triggered_on_date (docs/tasks/14).
+private val MILESTONE_DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM")
 
 private fun DayState.label(): String = when (this) {
     DayState.COMPLETE -> "complete"
