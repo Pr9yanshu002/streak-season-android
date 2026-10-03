@@ -353,6 +353,40 @@ screen, so it is blocked at creation rather than rendered.
 
 ---
 
+## R19 — Recap statistics
+
+Computed once an arc has ended (`completed` or `failed`). All statistics are
+over the **recap period**: `start_date` through `end_date` for a completed arc,
+or `start_date` through `failed_on_date` for a failed one. Days after a failure
+do not count, even if the user kept logging.
+
+**Headline.** `completeDays` over `countedDays`, using exactly R8's counted set
+restricted to the recap period: the same exclusions (rest, pending, future, and
+days with no required commitment scheduled). The headline and the completion
+percentage must always agree — they are two views of one ratio, never two
+definitions.
+
+**Best streak.** R11's `bestStreak`, restricted to the recap period.
+
+**Hardest week.** The ISO week (same week keys as R6) with the lowest ratio of
+complete days to counted days, among weeks with **at least 3 counted days** in
+the recap period. Weeks with fewer are excluded — a two-day edge week where one
+day was missed would otherwise dominate. Ties go to the earliest week. If no
+week qualifies, there is no hardest week.
+
+**Per-commitment totals**, over days in the recap period where the commitment
+was scheduled and active:
+
+- `binary` — the number of days it was done.
+- `counter` and `duration` — the sum of recorded values, plus the number of days
+  the target was met.
+- `log` — the first and last recorded values, by date, and the number of days a
+  value was recorded. No pass or fail.
+
+Soft-deleted entries never count. Commitments removed mid-arc are included,
+over the days they were active.
+
+
 ## Reference: state machine
 
 ```

@@ -31,4 +31,52 @@ data class ExpectDto(
     // fixture omits must fail, same reasoning as commit_status_no_missing_keys.
     @SerialName("required_milestones")
     val requiredMilestones: Map<String, String>? = null,
+    // R19 recap. Present -> the harness calls recap() and asserts. Unlike most
+    // expect blocks this is asserted whole (see RecapExpectDto) so no field the
+    // engine computes slips by unasserted.
+    val recap: RecapExpectDto? = null,
+)
+
+// R19 — the expected Recap. When present and not is_null, EVERY field is
+// asserted: the scalars, hardest_week (omitted means "assert null — no hardest
+// week"), and the full commitment_totals set. This whole-object stance mirrors
+// required_milestones: a partial assertion would let a wrong value the author
+// didn't think to list pass silently.
+@Serializable
+data class RecapExpectDto(
+    // true -> recap() must return null (an arc that has not ended). All other
+    // fields are ignored in that case.
+    @SerialName("is_null") val isNull: Boolean = false,
+    val status: String? = null,
+    @SerialName("complete_days") val completeDays: Int? = null,
+    @SerialName("counted_days") val countedDays: Int? = null,
+    @SerialName("completion_pct") val completionPct: Double? = null,
+    @SerialName("days_reached") val daysReached: Int? = null,
+    @SerialName("best_streak") val bestStreak: Int? = null,
+    // Omitted (or JSON null) means "assert there is no hardest week".
+    @SerialName("hardest_week") val hardestWeek: HardestWeekExpectDto? = null,
+    // commitment id -> that commitment's expected total. Asserted as a whole
+    // set: a commitment the engine returns that the fixture omits fails.
+    @SerialName("commitment_totals") val commitmentTotals: Map<String, CommitmentTotalExpectDto>? = null,
+)
+
+@Serializable
+data class HardestWeekExpectDto(
+    @SerialName("week_key") val weekKey: String,
+    @SerialName("complete_days") val completeDays: Int,
+    @SerialName("counted_days") val countedDays: Int,
+)
+
+// One of three shapes, discriminated by `kind`: "binary" (days_done),
+// "measured" for counter/duration (total + days_target_met), or "log"
+// (first/last/days_recorded; first and last are null when nothing was recorded).
+@Serializable
+data class CommitmentTotalExpectDto(
+    val kind: String,
+    @SerialName("days_done") val daysDone: Int? = null,
+    val total: Double? = null,
+    @SerialName("days_target_met") val daysTargetMet: Int? = null,
+    val first: Double? = null,
+    val last: Double? = null,
+    @SerialName("days_recorded") val daysRecorded: Int? = null,
 )

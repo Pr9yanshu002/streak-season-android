@@ -1,0 +1,58 @@
+{
+  "id": "recap_completed_headline_matches_pct",
+  "rules": ["R19", "R8"],
+  "description": "Completed arc with a rest day and unscheduled (weekend) days. The recap headline (complete/counted) and completion_pct are the same ratio.",
+  "note": "10-day arc, weekdays-only commitment so Sat/Sun are unscheduled (excluded), plus one rest day (excluded). Counted = Jan 1,2,5,7,8,9 (6); complete = Jan 1,2,5,7,9 (5). 5/6 = 0.8333. Best streak runs Jan 1-7 (complete days + the Jan 6 rest) = 7. Only W02 has >=3 counted days (Jan 5,7,8,9): 3 complete of 4.",
+
+  "now": "2026-01-12T09:00:00",
+
+  "arc": {
+    "id": "arc-1",
+    "name": "Completed Arc",
+    "start_date": "2026-01-01",
+    "end_date": "2026-01-10",
+    "status": "active",
+    "strictness": "standard",
+    "rest_tokens_per_week": 1,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+
+  "commitments": [
+    {
+      "id": "c-run",
+      "name": "Run",
+      "type": "binary",
+      "is_required": true,
+      "schedule_type": "weekdays",
+      "schedule_days": "1,2,3,4,5",
+      "active_from": "2026-01-01"
+    }
+  ],
+
+  "days": [
+    { "date": "2026-01-01", "entries": { "c-run": 1 } },
+    { "date": "2026-01-02", "entries": { "c-run": 1 } },
+    { "date": "2026-01-05", "entries": { "c-run": 1 } },
+    { "date": "2026-01-06", "entries": {}, "rest_token_used": true },
+    { "date": "2026-01-07", "entries": { "c-run": 1 } },
+    { "date": "2026-01-09", "entries": { "c-run": 1 } }
+  ],
+
+  "expect": {
+    "arc_status": "completed",
+    "failed_on_date": null,
+    "recap": {
+      "status": "completed",
+      "complete_days": 5,
+      "counted_days": 6,
+      "completion_pct": 0.8333,
+      "days_reached": 10,
+      "best_streak": 7,
+      "hardest_week": { "week_key": "2026-W02", "complete_days": 3, "counted_days": 4 },
+      "commitment_totals": {
+        "c-run": { "kind": "binary", "days_done": 5 }
+      }
+    }
+  }
+}

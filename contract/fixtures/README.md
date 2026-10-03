@@ -130,11 +130,41 @@ change to a fixture the way you'd treat a change to a public API.
   }
   ```
 
+- **`recap`** (R19) is the output of the separate `recap()` function, not
+  `resolve()`. When a fixture includes an `expect.recap` block the harness calls
+  `recap()` and asserts it. Unlike most `expect` keys, the recap block is
+  asserted **whole** — every scalar, `hardest_week`, and the complete
+  `commitment_totals` set — so a value the author didn't think to list cannot
+  pass silently (same reasoning as `required_milestones`). Within it:
+  - `is_null: true` asserts `recap()` returned `null` (an arc that hasn't
+    ended); all other recap fields are ignored.
+  - `status`, `complete_days`, `counted_days`, `completion_pct`, `days_reached`,
+    `best_streak` are scalars. `completion_pct` compares to 4 dp like the
+    top-level one. `days_reached` is the arc length for a completed arc, or the
+    day reached before failing for a failed one.
+  - `hardest_week` is `{ week_key, complete_days, counted_days }`, or **omitted
+    to assert there is no hardest week**.
+  - `commitment_totals` maps commitment id to a total tagged by `kind`:
+    `binary` → `days_done`; `measured` (counter/duration) → `total` +
+    `days_target_met`; `log` → `first` + `last` (both null if nothing recorded)
+    + `days_recorded`.
+
+  ```jsonc
+  "recap": {
+    "status": "failed",
+    "complete_days": 2, "counted_days": 3, "completion_pct": 0.6667,
+    "days_reached": 3, "best_streak": 2,
+    "hardest_week": { "week_key": "2026-W01", "complete_days": 2, "counted_days": 3 },
+    "commitment_totals": { "c-gym": { "kind": "binary", "days_done": 2 } }
+  }
+  ```
+
 ### Naming
 
 `<area>_<case>.json`, snake_case. Areas: `boundary`, `schedule`, `satisfy`,
 `state`, `rest`, `seal`, `strict`, `streak`, `pct`, `milestone`, `edit`,
-`commit_status` (R3/R4 per-commitment status), `daynum` (R2 day count).
+`commit_status` (R3/R4 per-commitment status), `daynum` (R2 day count),
+`recap` (R19 recap statistics).
 
 ---
 

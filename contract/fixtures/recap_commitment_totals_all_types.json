@@ -1,0 +1,88 @@
+{
+  "id": "recap_commitment_totals_all_types",
+  "rules": ["R19"],
+  "description": "Per-commitment totals for all four commitment types: binary, counter, duration, log.",
+  "note": "Arc Jan 5-9, one required binary (c-gym) plus three bonus commitments so day state depends only on c-gym. c-gym done Jan 5,6,8,9 (Jan 7 missed) -> days_done 4. c-pushups (counter, target 30): values 30,20,35,30,10 -> total 125, target met on 3 days. c-read (duration, target 20): 25,20,15,40,20 -> total 120, target met on 4 days. c-weight (log): 80.0 down to 78.0 over 5 recorded days. Counted = 5, complete = 4 (0.8). Only W02.",
+
+  "now": "2026-01-11T09:00:00",
+
+  "arc": {
+    "id": "arc-1",
+    "name": "All Types Arc",
+    "start_date": "2026-01-05",
+    "end_date": "2026-01-09",
+    "status": "active",
+    "strictness": "standard",
+    "rest_tokens_per_week": 0,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+
+  "commitments": [
+    {
+      "id": "c-gym",
+      "name": "Gym",
+      "type": "binary",
+      "is_required": true,
+      "schedule_type": "daily",
+      "active_from": "2026-01-05"
+    },
+    {
+      "id": "c-pushups",
+      "name": "Push-ups",
+      "type": "counter",
+      "target_value": 30,
+      "unit": "reps",
+      "is_required": false,
+      "schedule_type": "daily",
+      "active_from": "2026-01-05"
+    },
+    {
+      "id": "c-read",
+      "name": "Read",
+      "type": "duration",
+      "target_value": 20,
+      "unit": "minutes",
+      "is_required": false,
+      "schedule_type": "daily",
+      "active_from": "2026-01-05"
+    },
+    {
+      "id": "c-weight",
+      "name": "Weight",
+      "type": "log",
+      "unit": "kg",
+      "is_required": false,
+      "schedule_type": "daily",
+      "active_from": "2026-01-05"
+    }
+  ],
+
+  "days": [
+    { "date": "2026-01-05", "entries": { "c-gym": 1, "c-pushups": 30, "c-read": 25, "c-weight": 80.0 } },
+    { "date": "2026-01-06", "entries": { "c-gym": 1, "c-pushups": 20, "c-read": 20, "c-weight": 79.5 } },
+    { "date": "2026-01-07", "entries": { "c-pushups": 35, "c-read": 15, "c-weight": 79.0 } },
+    { "date": "2026-01-08", "entries": { "c-gym": 1, "c-pushups": 30, "c-read": 40, "c-weight": 78.5 } },
+    { "date": "2026-01-09", "entries": { "c-gym": 1, "c-pushups": 10, "c-read": 20, "c-weight": 78.0 } }
+  ],
+
+  "expect": {
+    "arc_status": "completed",
+    "failed_on_date": null,
+    "recap": {
+      "status": "completed",
+      "complete_days": 4,
+      "counted_days": 5,
+      "completion_pct": 0.8,
+      "days_reached": 5,
+      "best_streak": 2,
+      "hardest_week": { "week_key": "2026-W02", "complete_days": 4, "counted_days": 5 },
+      "commitment_totals": {
+        "c-gym": { "kind": "binary", "days_done": 4 },
+        "c-pushups": { "kind": "measured", "total": 125.0, "days_target_met": 3 },
+        "c-read": { "kind": "measured", "total": 120.0, "days_target_met": 4 },
+        "c-weight": { "kind": "log", "first": 80.0, "last": 78.0, "days_recorded": 5 }
+      }
+    }
+  }
+}

@@ -1,5 +1,6 @@
 package dev.priyanshu.arc.domain.rules
 
+import dev.priyanshu.arc.domain.fixtures.CommitmentTotalExpectDto
 import dev.priyanshu.arc.domain.fixtures.FixtureDto
 import dev.priyanshu.arc.domain.fixtures.FixtureLoader
 import dev.priyanshu.arc.domain.fixtures.parseArcStatus
@@ -7,7 +8,11 @@ import dev.priyanshu.arc.domain.fixtures.parseCommitmentStatus
 import dev.priyanshu.arc.domain.fixtures.parseDayState
 import dev.priyanshu.arc.domain.fixtures.parseMilestoneKind
 import dev.priyanshu.arc.domain.fixtures.toDomain
+import dev.priyanshu.arc.domain.rules.recap.CommitmentTotal
+import dev.priyanshu.arc.domain.rules.recap.HardestWeek
+import dev.priyanshu.arc.domain.rules.recap.recap
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.TestFactory
 import java.math.BigDecimal
@@ -113,9 +118,58 @@ class RulesEngineFixtureTest {
             }
             assertEquals(expected, resolution.requiredMilestones, "[${fixture.id}] required_milestones")
         }
+
+        // R19 — the recap is a separate pure function over the same inputs plus
+        // the resolution. Asserted whole (README.md): when present and not
+        // is_null, every field including hardest_week and the full
+        // commitment_totals set must match.
+        expect.recap?.let { recapExpect ->
+            val recap = recap(
+                arc = fixture.arc.toDomain(),
+                commitments = fixture.commitments.map { it.toDomain() },
+                days = fixture.days.map { it.toDomain() },
+                resolution = resolution,
+            )
+            if (recapExpect.isNull) {
+                assertNull(recap, "[${fixture.id}] recap should be null")
+                return@let
+            }
+            requireNotNull(recap) { "[${fixture.id}] recap was null but the fixture expects a value" }
+
+            assertEquals(parseArcStatus(recapExpect.status!!), recap.status, "[${fixture.id}] recap.status")
+            assertEquals(recapExpect.completeDays, recap.completeDays, "[${fixture.id}] recap.complete_days")
+            assertEquals(recapExpect.countedDays, recap.countedDays, "[${fixture.id}] recap.counted_days")
+            assertEquals(round4(recapExpect.completionPct!!), round4(recap.completionPct), "[${fixture.id}] recap.completion_pct")
+            assertEquals(recapExpect.daysReached, recap.daysReached, "[${fixture.id}] recap.days_reached")
+            assertEquals(recapExpect.bestStreak, recap.bestStreak, "[${fixture.id}] recap.best_streak")
+
+            val expectedHardest = recapExpect.hardestWeek?.let {
+                HardestWeek(it.weekKey, it.completeDays, it.countedDays)
+            }
+            assertEquals(expectedHardest, recap.hardestWeek, "[${fixture.id}] recap.hardest_week")
+
+            val expectedTotals = recapExpect.commitmentTotals!!.entries.associate { (id, dto) ->
+                id to dto.toCommitmentTotal(id)
+            }
+            val actualTotals = recap.commitmentTotals.associateBy { it.commitmentId }
+            assertEquals(expectedTotals, actualTotals, "[${fixture.id}] recap.commitment_totals")
+        }
     }
 
     // completion_pct compares to 4 decimal places, round half up (README.md).
     private fun round4(value: Double): BigDecimal =
         BigDecimal.valueOf(value).setScale(4, RoundingMode.HALF_UP)
+
+    // first/last are legitimately null for a log with nothing recorded, so they
+    // are not required; every other field is, for its kind.
+    private fun CommitmentTotalExpectDto.toCommitmentTotal(id: String): CommitmentTotal = when (kind) {
+        "binary" -> CommitmentTotal.Binary(id, requireNotNull(daysDone) { "binary total needs days_done" })
+        "measured" -> CommitmentTotal.Measured(
+            id,
+            requireNotNull(total) { "measured total needs total" },
+            requireNotNull(daysTargetMet) { "measured total needs days_target_met" },
+        )
+        "log" -> CommitmentTotal.Log(id, first, last, requireNotNull(daysRecorded) { "log total needs days_recorded" })
+        else -> error("unknown commitment total kind '$kind'")
+    }
 }

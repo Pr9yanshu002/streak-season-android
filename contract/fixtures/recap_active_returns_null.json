@@ -1,0 +1,51 @@
+{
+  "id": "recap_active_returns_null",
+  "rules": ["R19"],
+  "description": "recap() returns null for an arc that has not ended.",
+  "note": "Active arc mid-run (day 10 of 30). recap() only produces statistics once an arc is completed or failed, so here it returns null.",
+
+  "now": "2026-01-10T09:00:00",
+
+  "arc": {
+    "id": "arc-1",
+    "name": "Active Arc",
+    "start_date": "2026-01-01",
+    "end_date": "2026-01-30",
+    "status": "active",
+    "strictness": "standard",
+    "rest_tokens_per_week": 0,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+
+  "commitments": [
+    {
+      "id": "c-gym",
+      "name": "Gym",
+      "type": "binary",
+      "is_required": true,
+      "schedule_type": "daily",
+      "active_from": "2026-01-01"
+    }
+  ],
+
+  "days": [
+    { "date": "2026-01-01", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-02", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-03", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-04", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-05", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-06", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-07", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-08", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-09", "entries": { "c-gym": 1 } }
+  ],
+
+  "expect": {
+    "arc_status": "active",
+    "failed_on_date": null,
+    "recap": {
+      "is_null": true
+    }
+  }
+}

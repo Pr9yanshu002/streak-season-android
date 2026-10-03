@@ -1,0 +1,57 @@
+{
+  "id": "recap_failed_ignores_post_failure",
+  "rules": ["R19", "R9"],
+  "description": "Failed arc. Entries logged after failed_on_date must not count toward any recap statistic.",
+  "note": "Strict arc fails on Jan 3 (first sealed miss). Recap period is Jan 1-3. The user keeps logging Jan 4-7 (all done) but those are after the failure and never counted. Counted = Jan 1,2,3 (3); complete = Jan 1,2 (2). 2/3 = 0.6667. Made it to day 3. Only W01 qualifies (3 counted).",
+
+  "now": "2026-01-20T09:00:00",
+
+  "arc": {
+    "id": "arc-1",
+    "name": "Failed Arc",
+    "start_date": "2026-01-01",
+    "end_date": "2026-01-30",
+    "status": "active",
+    "strictness": "strict",
+    "rest_tokens_per_week": 0,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+
+  "commitments": [
+    {
+      "id": "c-gym",
+      "name": "Gym",
+      "type": "binary",
+      "is_required": true,
+      "schedule_type": "daily",
+      "active_from": "2026-01-01"
+    }
+  ],
+
+  "days": [
+    { "date": "2026-01-01", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-02", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-04", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-05", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-06", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-07", "entries": { "c-gym": 1 } }
+  ],
+
+  "expect": {
+    "arc_status": "failed",
+    "failed_on_date": "2026-01-03",
+    "recap": {
+      "status": "failed",
+      "complete_days": 2,
+      "counted_days": 3,
+      "completion_pct": 0.6667,
+      "days_reached": 3,
+      "best_streak": 2,
+      "hardest_week": { "week_key": "2026-W01", "complete_days": 2, "counted_days": 3 },
+      "commitment_totals": {
+        "c-gym": { "kind": "binary", "days_done": 2 }
+      }
+    }
+  }
+}

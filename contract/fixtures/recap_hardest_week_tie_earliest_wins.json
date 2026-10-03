@@ -1,0 +1,59 @@
+{
+  "id": "recap_hardest_week_tie_earliest_wins",
+  "rules": ["R19"],
+  "description": "Two weeks tie for the lowest ratio; the earliest week wins. Denominators differ (2/4 vs 3/6) to exercise the cross-multiplied comparison.",
+  "note": "Arc Jan 8-20. W02 = Jan 8-11 (4 counted, 2 complete = 0.5). W03 = Jan 12-18, with Jan 18 a rest day (excluded), so 6 counted, 3 complete = 0.5. W04 = Jan 19,20 (2 counted, excluded). W02 and W03 tie at 0.5; earliest (W02) is the hardest week. Total complete = 7 of 12 counted = 0.5833. Best streak = 3 (Jan 12-14, and the Jan 18 rest + Jan 19,20).",
+
+  "now": "2026-01-22T09:00:00",
+
+  "arc": {
+    "id": "arc-1",
+    "name": "Tie Arc",
+    "start_date": "2026-01-08",
+    "end_date": "2026-01-20",
+    "status": "active",
+    "strictness": "standard",
+    "rest_tokens_per_week": 1,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+
+  "commitments": [
+    {
+      "id": "c-gym",
+      "name": "Gym",
+      "type": "binary",
+      "is_required": true,
+      "schedule_type": "daily",
+      "active_from": "2026-01-08"
+    }
+  ],
+
+  "days": [
+    { "date": "2026-01-08", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-09", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-12", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-13", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-14", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-18", "entries": {}, "rest_token_used": true },
+    { "date": "2026-01-19", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-20", "entries": { "c-gym": 1 } }
+  ],
+
+  "expect": {
+    "arc_status": "completed",
+    "failed_on_date": null,
+    "recap": {
+      "status": "completed",
+      "complete_days": 7,
+      "counted_days": 12,
+      "completion_pct": 0.5833,
+      "days_reached": 13,
+      "best_streak": 3,
+      "hardest_week": { "week_key": "2026-W02", "complete_days": 2, "counted_days": 4 },
+      "commitment_totals": {
+        "c-gym": { "kind": "binary", "days_done": 7 }
+      }
+    }
+  }
+}
