@@ -55,6 +55,7 @@ fun TodayRoute(
     viewModel: TodayViewModel = koinViewModel(),
     onCreateArc: () -> Unit = {},
     onRemix: (sourceArcId: String) -> Unit = {},
+    onViewRecap: (sourceArcId: String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     // No navigation library — MainActivity's in-memory route switch reuses
@@ -82,6 +83,7 @@ fun TodayRoute(
         onUndo = viewModel::undo,
         onCreateArc = onCreateArc,
         onRemix = onRemix,
+        onViewRecap = onViewRecap,
         modifier = modifier,
     )
 }
@@ -98,6 +100,7 @@ fun TodayScreen(
     onUndo: (commitmentId: String) -> Unit,
     onCreateArc: () -> Unit,
     onRemix: (sourceArcId: String) -> Unit,
+    onViewRecap: (sourceArcId: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // A pending milestone takes over the whole screen (docs/tasks/12) — shown
@@ -154,7 +157,10 @@ fun TodayScreen(
                         },
                         textAlign = TextAlign.Center,
                     )
-                    Button(onClick = onCreateArc) { Text("Start a new arc") }
+                    // Recap is the main thing to do from here (docs/tasks/15);
+                    // the run-again / start-new actions live on its last card.
+                    Button(onClick = { onViewRecap(state.sourceArcId) }) { Text("View recap") }
+                    OutlinedButton(onClick = onCreateArc) { Text("Start a new arc") }
                     // Remix only makes sense for a failed arc — a completed
                     // one has nothing to retry.
                     if (!state.completed) {
@@ -493,6 +499,7 @@ private fun TodayScreenPreview() {
             onUndo = {},
             onCreateArc = {},
             onRemix = {},
+            onViewRecap = {},
         )
     }
 }

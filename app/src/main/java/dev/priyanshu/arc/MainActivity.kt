@@ -20,6 +20,7 @@ import dev.priyanshu.arc.data.ArcRepository
 import dev.priyanshu.arc.ui.create.CreateArcRoute
 import dev.priyanshu.arc.ui.debug.DebugMenuRoute
 import dev.priyanshu.arc.ui.nav.AppRoute
+import dev.priyanshu.arc.ui.recap.RecapRoute
 import dev.priyanshu.arc.ui.theme.StreakSeasonTheme
 import dev.priyanshu.arc.ui.today.TodayRoute
 import kotlinx.coroutines.launch
@@ -50,6 +51,18 @@ class MainActivity : ComponentActivity() {
                             TodayRoute(
                                 onCreateArc = { route = AppRoute.CreateArc() },
                                 onRemix = { sourceArcId -> route = AppRoute.CreateArc(remixFromArcId = sourceArcId) },
+                                onViewRecap = { sourceArcId -> route = AppRoute.Recap(sourceArcId) },
+                                modifier = Modifier.padding(innerPadding),
+                            )
+
+                        is AppRoute.Recap ->
+                            RecapRoute(
+                                arcId = current.arcId,
+                                // Both actions go through the create flow; neither
+                                // touches the ended arc's status (docs/tasks/15).
+                                onRunAgain = { route = AppRoute.CreateArc(remixFromArcId = current.arcId) },
+                                onStartNew = { route = AppRoute.CreateArc() },
+                                onBack = { route = AppRoute.Today },
                                 modifier = Modifier.padding(innerPadding),
                             )
 

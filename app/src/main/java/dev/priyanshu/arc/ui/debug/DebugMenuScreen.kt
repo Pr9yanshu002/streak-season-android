@@ -87,4 +87,5 @@ private fun DebugScenario.label(): String = when (this) {
     DebugScenario.MILESTONE_PENDING -> "Milestone pending"
     DebugScenario.ENDED_COMPLETED -> "Ended — completed"
     DebugScenario.ENDED_FAILED -> "Ended — failed"
+    DebugScenario.ENDED_RECAP -> "Ended — recap showcase"
 }

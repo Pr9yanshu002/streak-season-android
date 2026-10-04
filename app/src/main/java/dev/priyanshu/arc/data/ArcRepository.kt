@@ -20,6 +20,8 @@ import dev.priyanshu.arc.domain.model.ScheduleType
 import dev.priyanshu.arc.domain.model.Strictness
 import dev.priyanshu.arc.domain.rules.RulesEngine
 import dev.priyanshu.arc.domain.rules.Resolution
+import dev.priyanshu.arc.domain.rules.recap.Recap
+import dev.priyanshu.arc.domain.rules.recap.recap
 import java.time.LocalDate
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
@@ -61,6 +63,31 @@ data class TodaySnapshot(
     val commitments: List<Commitment>,
     val todayEntries: List<Entry>,
     val resolution: Resolution,
+)
+
+// Everything the recap screen renders (docs/tasks/15). recap is the engine's
+// R19 statistics; the rest is what those stats don't carry — the arc's name,
+// date range and day-1 intention (intention is UI-only, not on domain Arc),
+// the commitments (so a CommitmentTotal's id can be shown with its name/unit),
+// and the milestone rows with their reflections (card 6 reads the milestones
+// table, not the engine). Computed once, when the screen opens — not observed.
+data class RecapScreenData(
+    val recap: Recap,
+    val arcName: String,
+    val startDate: LocalDate,
+    val endDate: LocalDate,
+    val intention: String?,
+    val commitments: List<Commitment>,
+    val milestones: List<RecapMilestone>,
+)
+
+// One milestone as the recap lists it (docs/tasks/15), straight from the
+// milestones table. triggered_on_date is always present on rows this app
+// writes (reconcile always supplies one), so a row without one is skipped.
+data class RecapMilestone(
+    val kind: MilestoneKind,
+    val date: LocalDate,
+    val reflection: String?,
 )
 
 // R15 (docs/tasks/09-r15-r16-and-fixes.md) is a state a user can genuinely
@@ -176,6 +203,36 @@ class ArcRepository(
         )
     }
 
+    // R19 (docs/tasks/15) — assembles everything the recap screen needs in one
+    // shot (the recap is shown once, not observed). Returns null when the arc
+    // hasn't ended: recap() itself gates on COMPLETED/FAILED, so a null here
+    // means "no recap to show". Reuses observeSnapshot so the four-DAO load
+    // isn't duplicated; reads the ArcEntity directly only for intention, which
+    // the domain Arc trims out as UI-only.
+    suspend fun getRecapScreenData(arcId: String): RecapScreenData? {
+        val snapshot = observeSnapshot(arcId).first()
+        val resolution = RulesEngine.resolve(snapshot.arc, snapshot.commitments, snapshot.days, clock.now())
+        val recapStats = recap(snapshot.arc, snapshot.commitments, snapshot.days, resolution) ?: return null
+        val arcEntity = arcDao.observeById(arcId).first() ?: return null
+        val milestones = milestoneDao.observeByArc(arcId).first().mapNotNull { entity ->
+            val triggeredOn = entity.triggeredOnDate ?: return@mapNotNull null
+            RecapMilestone(
+                kind = MilestoneKind.valueOf(entity.kind.uppercase()),
+                date = LocalDate.parse(triggeredOn),
+                reflection = entity.reflection,
+            )
+        }
+        return RecapScreenData(
+            recap = recapStats,
+            arcName = arcEntity.name,
+            startDate = snapshot.arc.startDate,
+            endDate = snapshot.arc.endDate,
+            intention = arcEntity.intention,
+            commitments = snapshot.commitments,
+            milestones = milestones,
+        )
+    }
+
     // 'start' is excluded (docs/tasks/12) — it anchors the recap's timeline,
     // not a card the user dismisses.
     fun observePendingMilestones(arcId: String): Flow<List<PendingMilestone>> =
@@ -216,6 +273,10 @@ class ArcRepository(
         dayBoundaryHour: Int,
         commitments: List<NewCommitment>,
         remixedFromArcId: String? = null,
+        // The day-1 "why" (arcs.intention). Persisted here so the recap's
+        // Intention card (docs/tasks/15) has something to show — the create
+        // flow collects it and now passes it through.
+        intention: String? = null,
     ): CreateArcResult {
         // R15 — at most one active arc at a time. A condition the user can
         // genuinely reach, so it's reported, not thrown.
@@ -235,6 +296,7 @@ class ArcRepository(
                 restTokensPerWeek = restTokensPerWeek,
                 backfillDays = backfillDays,
                 dayBoundaryHour = dayBoundaryHour,
+                intention = intention?.trim()?.ifBlank { null },
                 remixedFromArcId = remixedFromArcId,
                 createdAt = now,
                 updatedAt = now,
