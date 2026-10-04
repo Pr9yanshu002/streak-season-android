@@ -184,7 +184,9 @@ to `active` after materialising the milestones.
 ## Test status
 
 - `./gradlew :domain:test` — green (70 fixtures, incl. 8 recap).
-- `./gradlew :app:testDebugUnitTest` — green (incl. `RecapViewModelTest`).
-- `getRecapScreenData` (the repo accessor) has no automated test yet — it was
-  verified by the emulator run. An in-memory-Room test would be a durable guard
-  (offered, not yet added).
+- `./gradlew :app:testDebugUnitTest` — green (incl. `RecapViewModelTest` and
+  `ArcRepositoryRecapTest`).
+- `getRecapScreenData` (the repo accessor) is guarded by `ArcRepositoryRecapTest`
+  — an in-memory-Room round-trip that creates an ended arc, reconciles, acknowledges
+  a milestone reflection, and asserts the full `RecapScreenData` (recap numbers,
+  intention, commitments, milestone reflections), plus a null case for an active arc.
