@@ -2,6 +2,7 @@ package dev.priyanshu.arc.domain.fixtures
 
 import java.io.File
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DynamicTest
@@ -19,10 +20,16 @@ import org.junit.jupiter.api.TestFactory
 // note, rules, …) are deliberately allowed (docs/tasks/13).
 class FixtureExpectKeysTest {
 
-    private val allowedExpectKeys: Set<String> =
-        (0 until ExpectDto.serializer().descriptor.elementsCount)
-            .map { ExpectDto.serializer().descriptor.getElementName(it) }
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    private fun allowedKeys(serializer: kotlinx.serialization.KSerializer<*>): Set<String> =
+        (0 until serializer.descriptor.elementsCount)
+            .map { serializer.descriptor.getElementName(it) }
             .toSet()
+
+    private val allowedExpectKeys = allowedKeys(ExpectDto.serializer())
+    private val allowedRecapKeys = allowedKeys(RecapExpectDto.serializer())
+    private val allowedHardestWeekKeys = allowedKeys(HardestWeekExpectDto.serializer())
+    private val allowedCommitmentTotalKeys = allowedKeys(CommitmentTotalExpectDto.serializer())
 
     @TestFactory
     fun `every expect key is one the harness recognises`(): List<DynamicTest> {
@@ -38,13 +45,32 @@ class FixtureExpectKeysTest {
             DynamicTest.dynamicTest(file.nameWithoutExtension) {
                 val root = Json.parseToJsonElement(file.readText()).jsonObject
                 val expect = root["expect"]?.jsonObject ?: return@dynamicTest
-                val unknown = expect.keys - allowedExpectKeys
-                assertTrue(
-                    unknown.isEmpty(),
-                    "${file.name}: unrecognised expect key(s) $unknown — a typo, or a field " +
-                        "ExpectDto does not declare. Allowed: $allowedExpectKeys",
-                )
+                assertNoUnknownKeys(file.name, "expect", expect, allowedExpectKeys)
+
+                // recap is nested, so the top-level check above cannot see inside
+                // it — a typo like `recap.best_streek` would pass. Recurse into the
+                // recap block and its nested objects.
+                val recap = expect["recap"]?.jsonObject ?: return@dynamicTest
+                assertNoUnknownKeys(file.name, "expect.recap", recap, allowedRecapKeys)
+
+                (recap["hardest_week"] as? JsonObject)?.let {
+                    assertNoUnknownKeys(file.name, "expect.recap.hardest_week", it, allowedHardestWeekKeys)
+                }
+                (recap["commitment_totals"] as? JsonObject)?.forEach { (id, total) ->
+                    (total as? JsonObject)?.let {
+                        assertNoUnknownKeys(file.name, "expect.recap.commitment_totals[$id]", it, allowedCommitmentTotalKeys)
+                    }
+                }
             }
         }
+    }
+
+    private fun assertNoUnknownKeys(fileName: String, path: String, obj: JsonObject, allowed: Set<String>) {
+        val unknown = obj.keys - allowed
+        assertTrue(
+            unknown.isEmpty(),
+            "$fileName: unrecognised $path key(s) $unknown — a typo, or a field the DTO does " +
+                "not declare. Allowed: $allowed",
+        )
     }
 }

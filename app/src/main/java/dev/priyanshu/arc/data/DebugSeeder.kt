@@ -4,6 +4,7 @@ import dev.priyanshu.arc.domain.model.CommitmentType
 import dev.priyanshu.arc.domain.model.ScheduleType
 import dev.priyanshu.arc.domain.model.Strictness
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 // Named debug scenarios, one per flow worth testing on-device without
@@ -16,6 +17,7 @@ enum class DebugScenario {
     MILESTONE_PENDING,
     ENDED_COMPLETED,
     ENDED_FAILED,
+    ENDED_RECAP,
 }
 
 // Debug-only fixture data. Never runs in release builds — see
@@ -55,6 +57,7 @@ class DebugSeeder(
             DebugScenario.MILESTONE_PENDING -> seedMilestonePending()
             DebugScenario.ENDED_COMPLETED -> seedEndedCompleted()
             DebugScenario.ENDED_FAILED -> seedEndedFailed()
+            DebugScenario.ENDED_RECAP -> seedEndedRecap()
         }
     }
 
@@ -189,19 +192,111 @@ class DebugSeeder(
         )
     }
 
-    // No required commitments -> every day resolves complete regardless of
-    // entries, so the arc completes cleanly once today is past end_date.
+    // A clean 20-day completion: one required commitment, done every day, so
+    // it's a real 100% arc (not the old commitment-less 0-of-0 that made the
+    // recap headline read "0 of 0 days"). ENDED_RECAP is the richer showcase.
     private suspend fun seedEndedCompleted() {
         val today = clock.now().toLocalDate()
-        repository.createArc(
+        val startDate = today.minusDays(20)
+        val endDate = today.minusDays(1)
+        val result = repository.createArc(
             name = "Finished Strong",
-            startDate = today.minusDays(20),
-            endDate = today.minusDays(1),
+            startDate = startDate,
+            endDate = endDate,
             strictness = Strictness.CHILL,
             restTokensPerWeek = 0,
             backfillDays = 2,
             dayBoundaryHour = 4,
-            commitments = emptyList(),
+            commitments = listOf(gymCommitment()),
+        )
+        val arcId = (result as? CreateArcResult.Created)?.arcId ?: error("debug seed failed: $result")
+        val gymId = repository.getCommitments(arcId).first { it.name == "Gym" }.id
+        var date = startDate
+        while (!date.isAfter(endDate)) {
+            repository.recordEntry(arcId, date, gymId, 1.0)
+            date = date.plusDays(1)
+        }
+    }
+
+    // A completed arc built to exercise every recap card (docs/tasks/15): all
+    // four commitment types, a gym run interrupted by a few missed days so
+    // there's a clear hardest week and a long closing streak, a day-1 intention,
+    // and reflections saved on two milestones. reconcile() materialises the
+    // milestones the way the app does on load; acknowledge() leaves the
+    // reflections.
+    private suspend fun seedEndedRecap() {
+        val today = clock.now().toLocalDate()
+        val startDate = today.minusDays(24)
+        val endDate = startDate.plusDays(20) // 21-day arc, already ended (ends today-4)
+
+        val result = repository.createArc(
+            name = "Winter Arc",
+            startDate = startDate,
+            endDate = endDate,
+            strictness = Strictness.STANDARD,
+            restTokensPerWeek = 1,
+            backfillDays = 2,
+            dayBoundaryHour = 4,
+            commitments = listOf(
+                NewCommitment(name = "Gym", type = CommitmentType.BINARY, isRequired = true, scheduleType = ScheduleType.DAILY),
+                NewCommitment(name = "Push-ups", type = CommitmentType.COUNTER, targetValue = 30.0, unit = "reps", isRequired = false, scheduleType = ScheduleType.DAILY),
+                NewCommitment(name = "Read", type = CommitmentType.DURATION, targetValue = 20.0, unit = "minutes", isRequired = false, scheduleType = ScheduleType.DAILY),
+                NewCommitment(name = "Weight", type = CommitmentType.LOG, unit = "kg", isRequired = false, scheduleType = ScheduleType.DAILY),
+            ),
+            intention = "Stop starting over every Monday. Build something that sticks.",
+        )
+        val arcId = (result as? CreateArcResult.Created)?.arcId ?: error("debug seed failed: $result")
+
+        val commitments = repository.getCommitments(arcId)
+        val gymId = commitments.first { it.name == "Gym" }.id
+        val pushupsId = commitments.first { it.name == "Push-ups" }.id
+        val readId = commitments.first { it.name == "Read" }.id
+        val weightId = commitments.first { it.name == "Weight" }.id
+
+        for (offset in 0..20) {
+            val date = startDate.plusDays(offset.toLong())
+            // Gym missed days 7-9 (one rough week), done otherwise: ~86%
+            // completion, a long closing streak, and one clearly worst week.
+            if (offset !in 7..9) repository.recordEntry(arcId, date, gymId, 1.0)
+            // Bonus commitments logged every day, including the gym-off ones.
+            repository.recordEntry(arcId, date, pushupsId, (25 + (offset % 3) * 5).toDouble()) // 25/30/35, target 30
+            repository.recordEntry(arcId, date, readId, (15 + (offset % 4) * 5).toDouble())     // 15/20/25/30, target 20
+            repository.recordEntry(arcId, date, weightId, 80.0 - offset * 0.1)                  // 80.0 -> 78.0
+        }
+
+        // Materialise milestones (what Today load does) and leave a reflection
+        // on two of them, so the Milestones card shows text, not just dates.
+        repository.reconcile(arcId)
+        val milestones = database.milestoneDao().observeByArc(arcId).first()
+        milestones.firstOrNull { it.kind == "p25" }?.let {
+            repository.acknowledgeMilestones(listOf(it.id), "First week felt impossible. Showed up anyway.", it.id)
+        }
+        milestones.firstOrNull { it.kind == "p50" }?.let {
+            repository.acknowledgeMilestones(listOf(it.id), "Halfway. The missed days stung but didn't end it.", it.id)
+        }
+        // Acknowledge the remaining milestones (p75, final) with no reflection,
+        // so nothing is left pending — Today lands straight on Ended, not on a
+        // pending-milestone card. 'start' never appears as a card anyway.
+        val remaining = milestones
+            .filter { it.kind !in setOf("start", "p25", "p50") }
+            .map { it.id }
+        if (remaining.isNotEmpty()) {
+            repository.acknowledgeMilestones(remaining, reflection = null, reflectionMilestoneId = remaining.first())
+        }
+
+        // reconcile() above flipped the stored status to 'completed', but Today
+        // only loads the arc whose status is 'active' (getActiveArcId) and shows
+        // Ended when the engine resolves that active arc as completed/failed —
+        // the same shape the other ended scenarios rely on by never reconciling.
+        // Put the stored status back to 'active'; Today's own reconcile on load
+        // re-derives completed, and the milestones/reflections created above
+        // already exist so they are kept, not recreated.
+        database.arcDao().updateStatusIfChanged(
+            arcId = arcId,
+            status = "active",
+            completedAt = null,
+            failedOnDate = null,
+            now = clock.millis(),
         )
     }
 

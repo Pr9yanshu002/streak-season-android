@@ -1,0 +1,52 @@
+{
+  "id": "recap_hardest_week_none_qualifies",
+  "rules": ["R19"],
+  "description": "An arc too short for any ISO week to have 3 counted days has no hardest week.",
+  "note": "Arc Jan 3-6 straddles two ISO weeks: W01 = Jan 3,4 (2 counted), W02 = Jan 5,6 (2 counted). Neither reaches 3, so hardest_week is omitted = asserted null. Counted = 4, complete = Jan 3,5 = 2, 0.5000. Best streak = 1 (complete days alternate with misses).",
+
+  "now": "2026-01-08T09:00:00",
+
+  "arc": {
+    "id": "arc-1",
+    "name": "Short Arc",
+    "start_date": "2026-01-03",
+    "end_date": "2026-01-06",
+    "status": "active",
+    "strictness": "standard",
+    "rest_tokens_per_week": 0,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+
+  "commitments": [
+    {
+      "id": "c-gym",
+      "name": "Gym",
+      "type": "binary",
+      "is_required": true,
+      "schedule_type": "daily",
+      "active_from": "2026-01-03"
+    }
+  ],
+
+  "days": [
+    { "date": "2026-01-03", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-05", "entries": { "c-gym": 1 } }
+  ],
+
+  "expect": {
+    "arc_status": "completed",
+    "failed_on_date": null,
+    "recap": {
+      "status": "completed",
+      "complete_days": 2,
+      "counted_days": 4,
+      "completion_pct": 0.5,
+      "days_reached": 4,
+      "best_streak": 1,
+      "commitment_totals": {
+        "c-gym": { "kind": "binary", "days_done": 2 }
+      }
+    }
+  }
+}

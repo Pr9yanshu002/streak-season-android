@@ -7,6 +7,7 @@ import dev.priyanshu.arc.data.Clock
 import dev.priyanshu.arc.data.DebugSeeder
 import dev.priyanshu.arc.data.SystemClock
 import dev.priyanshu.arc.ui.create.CreateArcViewModel
+import dev.priyanshu.arc.ui.recap.RecapViewModel
 import dev.priyanshu.arc.ui.today.TodayViewModel
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
@@ -40,6 +41,7 @@ val uiModule = module {
     // remixFromArcId (docs/tasks/12): null for a plain "start an arc", the
     // source arc's id when opened via Remix.
     viewModel { (remixFromArcId: String?) -> CreateArcViewModel(get(), get(), remixFromArcId) }
+    viewModel { RecapViewModel(get()) }
 }
 
 val appModules = listOf(databaseModule, clockModule, repositoryModule, debugModule, uiModule)

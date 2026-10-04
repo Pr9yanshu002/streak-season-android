@@ -365,12 +365,34 @@ private fun hasRequiredCommitmentScheduled(commitments: List<Commitment>, date: 
     commitments.any { it.isRequired && isScheduled(it, date) }
 
 /**
- * R8 — the fraction of "countable" elapsed days that resolved `complete`.
- * A day is countable when it isn't `rest`, `pending` or `future`, and it had
- * at least one required commitment scheduled — so rest days, today while
- * still pending, and days with nothing required on them (a weekdays-only arc
- * on a Sunday) affect neither the numerator nor the denominator. `0.0` when
- * nothing is countable.
+ * R8 — the "countable" days from the arc's start through [cutoff]: elapsed days
+ * that resolved to something other than `rest`, `pending` or `future` and had
+ * at least one required commitment scheduled — so rest days, today while still
+ * pending, and days with nothing required on them (a weekdays-only arc on a
+ * Sunday) are all excluded.
+ *
+ * This is the single definition of "which days count". Both the completion
+ * percentage (R8) and the recap headline / hardest week (R19) are built from
+ * it, so they can never drift apart — the whole point of R19's "two views of
+ * one ratio, never two definitions". [cutoff] is simply the as-of date
+ * [elapsedDates] caps at: the live `today` for a resolution, or the recap
+ * period's last day for `recap()`.
+ */
+internal fun countedDates(
+    arc: Arc,
+    commitments: List<Commitment>,
+    dayStates: Map<LocalDate, DayState>,
+    cutoff: LocalDate,
+): List<LocalDate> =
+    elapsedDates(arc, cutoff).filter { date ->
+        val state = dayStates.getValue(date)
+        val excluded = state == DayState.REST || state == DayState.PENDING || state == DayState.FUTURE
+        !excluded && hasRequiredCommitmentScheduled(commitments, date)
+    }
+
+/**
+ * R8 — the fraction of [countedDates] that resolved `complete`, rounded to four
+ * decimal places. `0.0` when nothing is countable.
  */
 internal fun completionPct(
     arc: Arc,
@@ -378,12 +400,7 @@ internal fun completionPct(
     dayStates: Map<LocalDate, DayState>,
     today: LocalDate,
 ): Double {
-    val elapsed = elapsedDates(arc, today)
-    val counted = elapsed.filter { date ->
-        val state = dayStates.getValue(date)
-        val excluded = state == DayState.REST || state == DayState.PENDING || state == DayState.FUTURE
-        !excluded && hasRequiredCommitmentScheduled(commitments, date)
-    }
+    val counted = countedDates(arc, commitments, dayStates, today)
     if (counted.isEmpty()) return 0.0
 
     val complete = counted.count { dayStates.getValue(it) == DayState.COMPLETE }

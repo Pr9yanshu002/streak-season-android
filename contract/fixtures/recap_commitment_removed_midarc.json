@@ -1,0 +1,71 @@
+{
+  "id": "recap_commitment_removed_midarc",
+  "rules": ["R19", "R3"],
+  "description": "A commitment removed mid-arc (active_until) is totalled only over the days it was active, even if the user kept logging it afterward.",
+  "note": "Arc Jan 5-14. c-gym (required, whole arc) is done every day -> 10 of 10 complete, 1.0. c-journal (bonus) is active Jan 5-9 only; it is logged Jan 5-11, but Jan 10,11 are after active_until so not scheduled and not counted -> days_done 5. Hardest week: W02 (7/7) and W03 (3/3) both 1.0, tie resolves to earliest W02. Best streak = 10.",
+
+  "now": "2026-01-16T09:00:00",
+
+  "arc": {
+    "id": "arc-1",
+    "name": "Removed Commitment Arc",
+    "start_date": "2026-01-05",
+    "end_date": "2026-01-14",
+    "status": "active",
+    "strictness": "standard",
+    "rest_tokens_per_week": 0,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+
+  "commitments": [
+    {
+      "id": "c-gym",
+      "name": "Gym",
+      "type": "binary",
+      "is_required": true,
+      "schedule_type": "daily",
+      "active_from": "2026-01-05"
+    },
+    {
+      "id": "c-journal",
+      "name": "Journal",
+      "type": "binary",
+      "is_required": false,
+      "schedule_type": "daily",
+      "active_from": "2026-01-05",
+      "active_until": "2026-01-09"
+    }
+  ],
+
+  "days": [
+    { "date": "2026-01-05", "entries": { "c-gym": 1, "c-journal": 1 } },
+    { "date": "2026-01-06", "entries": { "c-gym": 1, "c-journal": 1 } },
+    { "date": "2026-01-07", "entries": { "c-gym": 1, "c-journal": 1 } },
+    { "date": "2026-01-08", "entries": { "c-gym": 1, "c-journal": 1 } },
+    { "date": "2026-01-09", "entries": { "c-gym": 1, "c-journal": 1 } },
+    { "date": "2026-01-10", "entries": { "c-gym": 1, "c-journal": 1 } },
+    { "date": "2026-01-11", "entries": { "c-gym": 1, "c-journal": 1 } },
+    { "date": "2026-01-12", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-13", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-14", "entries": { "c-gym": 1 } }
+  ],
+
+  "expect": {
+    "arc_status": "completed",
+    "failed_on_date": null,
+    "recap": {
+      "status": "completed",
+      "complete_days": 10,
+      "counted_days": 10,
+      "completion_pct": 1.0,
+      "days_reached": 10,
+      "best_streak": 10,
+      "hardest_week": { "week_key": "2026-W02", "week_start": "2026-01-05", "week_end": "2026-01-11", "complete_days": 7, "counted_days": 7 },
+      "commitment_totals": {
+        "c-gym": { "kind": "binary", "days_done": 10 },
+        "c-journal": { "kind": "binary", "days_done": 5 }
+      }
+    }
+  }
+}

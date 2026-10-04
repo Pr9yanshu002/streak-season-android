@@ -228,6 +228,7 @@ class CreateArcViewModel(
                 dayBoundaryHour = s.dayBoundaryHour,
                 commitments = s.commitments.map { it.toNewCommitment() },
                 remixedFromArcId = remixFromArcId,
+                intention = s.intention,
             )
             when (result) {
                 is CreateArcResult.Created -> onCreated()
