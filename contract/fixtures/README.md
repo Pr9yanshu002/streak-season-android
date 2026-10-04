@@ -142,8 +142,10 @@ change to a fixture the way you'd treat a change to a public API.
     `best_streak` are scalars. `completion_pct` compares to 4 dp like the
     top-level one. `days_reached` is the arc length for a completed arc, or the
     day reached before failing for a failed one.
-  - `hardest_week` is `{ week_key, complete_days, counted_days }`, or **omitted
-    to assert there is no hardest week**.
+  - `hardest_week` is `{ week_key, week_start, week_end, complete_days,
+    counted_days }` (`week_start`/`week_end` are the Monday/Sunday of that ISO
+    week, which the recap card renders as a date range), or **omitted to assert
+    there is no hardest week**.
   - `commitment_totals` maps commitment id to a total tagged by `kind`:
     `binary` → `days_done`; `measured` (counter/duration) → `total` +
     `days_target_met`; `log` → `first` + `last` (both null if nothing recorded)

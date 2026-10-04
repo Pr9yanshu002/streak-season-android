@@ -63,6 +63,8 @@ data class RecapExpectDto(
 @Serializable
 data class HardestWeekExpectDto(
     @SerialName("week_key") val weekKey: String,
+    @SerialName("week_start") val weekStart: String,
+    @SerialName("week_end") val weekEnd: String,
     @SerialName("complete_days") val completeDays: Int,
     @SerialName("counted_days") val countedDays: Int,
 )

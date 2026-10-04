@@ -50,7 +50,7 @@
       "completion_pct": 0.5833,
       "days_reached": 13,
       "best_streak": 3,
-      "hardest_week": { "week_key": "2026-W02", "complete_days": 2, "counted_days": 4 },
+      "hardest_week": { "week_key": "2026-W02", "week_start": "2026-01-05", "week_end": "2026-01-11", "complete_days": 2, "counted_days": 4 },
       "commitment_totals": {
         "c-gym": { "kind": "binary", "days_done": 7 }
       }

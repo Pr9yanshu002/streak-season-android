@@ -17,6 +17,7 @@ import dev.priyanshu.arc.domain.rules.isScheduled
 import dev.priyanshu.arc.domain.rules.isSatisfied
 import dev.priyanshu.arc.domain.rules.isoWeekKey
 import java.time.LocalDate
+import java.time.temporal.ChronoField
 
 // R19 — recap statistics. A separate pure function over the same inputs as
 // resolve() plus the Resolution it produced; kept in its own file (and package)
@@ -40,6 +41,8 @@ data class Recap(
 
 data class HardestWeek(
     val weekKey: String,            // R6 ISO week key, e.g. "2026-W03"
+    val weekStart: LocalDate,       // Monday of that ISO week
+    val weekEnd: LocalDate,         // Sunday of that ISO week — the recap card shows this range
     val completeDays: Int,
     val countedDays: Int,
 )
@@ -154,7 +157,16 @@ private fun hardestWeek(
         val isLower = current == null ||
             weekComplete.toLong() * current.countedDays < current.completeDays.toLong() * weekCounted
         if (isLower) {
-            hardest = HardestWeek(weekKey, completeDays = weekComplete, countedDays = weekCounted)
+            // Monday..Sunday of this ISO week, from any date in it (all share
+            // the week). DAY_OF_WEEK is ISO (Mon=1..Sun=7), matching isoWeekKey.
+            val anyDate = datesThisWeek.first()
+            hardest = HardestWeek(
+                weekKey = weekKey,
+                weekStart = anyDate.with(ChronoField.DAY_OF_WEEK, 1),
+                weekEnd = anyDate.with(ChronoField.DAY_OF_WEEK, 7),
+                completeDays = weekComplete,
+                countedDays = weekCounted,
+            )
         }
     }
     return hardest

@@ -144,7 +144,13 @@ class RulesEngineFixtureTest {
             assertEquals(recapExpect.bestStreak, recap.bestStreak, "[${fixture.id}] recap.best_streak")
 
             val expectedHardest = recapExpect.hardestWeek?.let {
-                HardestWeek(it.weekKey, it.completeDays, it.countedDays)
+                HardestWeek(
+                    weekKey = it.weekKey,
+                    weekStart = LocalDate.parse(it.weekStart),
+                    weekEnd = LocalDate.parse(it.weekEnd),
+                    completeDays = it.completeDays,
+                    countedDays = it.countedDays,
+                )
             }
             assertEquals(expectedHardest, recap.hardestWeek, "[${fixture.id}] recap.hardest_week")
 
