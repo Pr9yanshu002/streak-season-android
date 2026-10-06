@@ -25,7 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import dev.priyanshu.arc.ui.theme.StreakSeasonTheme
+import dev.priyanshu.arc.ui.theme.StreakTheme
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
@@ -187,7 +187,7 @@ private fun Big(text: String) {
 @Preview(showBackground = true, name = "Recap — title")
 @Composable
 private fun RecapTitlePreview() {
-    StreakSeasonTheme {
+    StreakTheme {
         RecapScreen(
             state = RecapUiState.Loaded(
                 listOf(
@@ -203,7 +203,7 @@ private fun RecapTitlePreview() {
 @Preview(showBackground = true, name = "Recap — what next")
 @Composable
 private fun RecapWhatNextPreview() {
-    StreakSeasonTheme {
+    StreakTheme {
         RecapScreen(
             state = RecapUiState.Loaded(listOf(RecapCard.WhatNext)),
             onRunAgain = {},
