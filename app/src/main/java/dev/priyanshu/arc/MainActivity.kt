@@ -21,7 +21,7 @@ import dev.priyanshu.arc.ui.create.CreateArcRoute
 import dev.priyanshu.arc.ui.debug.DebugMenuRoute
 import dev.priyanshu.arc.ui.nav.AppRoute
 import dev.priyanshu.arc.ui.recap.RecapRoute
-import dev.priyanshu.arc.ui.theme.StreakSeasonTheme
+import dev.priyanshu.arc.ui.theme.StreakTheme
 import dev.priyanshu.arc.ui.today.TodayRoute
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
@@ -32,7 +32,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            StreakSeasonTheme {
+            StreakTheme {
                 var route by remember { mutableStateOf<AppRoute>(AppRoute.Today) }
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),

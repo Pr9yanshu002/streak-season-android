@@ -139,5 +139,19 @@ clobbers a UI-created arc; `seed(scenario)` is the debug menu's manual reseed,
 which explicitly wipes every table and reseeds exactly one of six named
 `DebugScenario`s (empty, not-started, active-mid-arc, milestone-pending,
 ended-completed, ended-failed). `docs/architecture.md` is a from-scratch
-architecture walkthrough written for the eventual Swift port. Remaining Compose
-work is whatever comes next (see `docs/tasks/` for the next brief).
+architecture walkthrough written for the eventual Swift port.
+
+The design system (`docs/tasks/16-design-system-theme.md`) is now in the theme.
+Its source of truth is `contract/design/tokens.json` (+ `README.md`). `ui/theme/`
+holds `StreakTheme` (replacing the template `StreakSeasonTheme`): Material 3
+`ColorScheme`s mapped from the tokens, a `Bricolage`/`Literata` `Typography`,
+`StreakShapes`, a `Space` object, and the non-Material tokens (`missed`, `rest`,
+the day-state colours, `ss-voice`) exposed via `StreakTheme.colors` /
+`StreakTheme.type` through static `CompositionLocal`s. Dynamic colour is gone.
+Static font cuts live in `res/font/` (`ss-title` uses 600, not tokens' 650).
+`ThemePreview.kt` renders every token in both themes. The task changed only the
+theme — no screen layout — so screens built against the template now show the
+new palette/fonts but still need their own redesign tasks.
+
+Remaining Compose work is whatever comes next (see `docs/tasks/` for the next
+brief).

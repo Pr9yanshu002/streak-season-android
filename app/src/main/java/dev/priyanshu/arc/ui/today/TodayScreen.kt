@@ -45,7 +45,7 @@ import androidx.compose.ui.unit.dp
 import dev.priyanshu.arc.domain.model.CommitmentType
 import dev.priyanshu.arc.domain.model.DayState
 import dev.priyanshu.arc.domain.model.MilestoneKind
-import dev.priyanshu.arc.ui.theme.StreakSeasonTheme
+import dev.priyanshu.arc.ui.theme.StreakTheme
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import org.koin.androidx.compose.koinViewModel
@@ -487,7 +487,7 @@ private fun fakeLoadedState() = TodayUiState.Loaded(
 @Preview(showBackground = true, name = "Today screen")
 @Composable
 private fun TodayScreenPreview() {
-    StreakSeasonTheme {
+    StreakTheme {
         TodayScreen(
             state = fakeLoadedState(),
             pendingMilestone = null,
@@ -507,7 +507,7 @@ private fun TodayScreenPreview() {
 @Preview(showBackground = true, name = "Binary")
 @Composable
 private fun BinaryCardPreview() {
-    StreakSeasonTheme {
+    StreakTheme {
         CommitmentCard(
             commitment = fakeCommitment("1", "Meditate", CommitmentType.BINARY),
             onToggleBinary = {}, onCounterChange = {}, onDurationChange = {}, onLogChange = {}, onUndo = {},
@@ -518,7 +518,7 @@ private fun BinaryCardPreview() {
 @Preview(showBackground = true, name = "Counter")
 @Composable
 private fun CounterCardPreview() {
-    StreakSeasonTheme {
+    StreakTheme {
         CommitmentCard(
             commitment = fakeCommitment("2", "Push-ups", CommitmentType.COUNTER, targetValue = 30.0, unit = "reps", currentValue = 12.0),
             onToggleBinary = {}, onCounterChange = {}, onDurationChange = {}, onLogChange = {}, onUndo = {},
@@ -529,7 +529,7 @@ private fun CounterCardPreview() {
 @Preview(showBackground = true, name = "Duration")
 @Composable
 private fun DurationCardPreview() {
-    StreakSeasonTheme {
+    StreakTheme {
         CommitmentCard(
             commitment = fakeCommitment(
                 "3", "Read", CommitmentType.DURATION,
@@ -543,7 +543,7 @@ private fun DurationCardPreview() {
 @Preview(showBackground = true, name = "Log")
 @Composable
 private fun LogCardPreview() {
-    StreakSeasonTheme {
+    StreakTheme {
         CommitmentCard(
             commitment = fakeCommitment("4", "Weight", CommitmentType.LOG, unit = "kg", currentValue = 71.2, isSatisfied = true),
             onToggleBinary = {}, onCounterChange = {}, onDurationChange = {}, onLogChange = {}, onUndo = {},
