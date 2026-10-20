@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import dev.priyanshu.arc.domain.model.CommitmentType
 import dev.priyanshu.arc.domain.model.DayState
 import dev.priyanshu.arc.domain.model.MilestoneKind
+import dev.priyanshu.arc.domain.model.Strictness
 import dev.priyanshu.arc.ui.theme.StreakTheme
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -81,6 +82,7 @@ fun TodayRoute(
         onDurationChange = viewModel::setDurationValue,
         onLogChange = viewModel::recordLog,
         onUndo = viewModel::undo,
+        onSetRestDay = viewModel::setRestDay,
         onCreateArc = onCreateArc,
         onRemix = onRemix,
         onViewRecap = onViewRecap,
@@ -98,6 +100,7 @@ fun TodayScreen(
     onDurationChange: (commitmentId: String, value: Double) -> Unit,
     onLogChange: (commitmentId: String, value: Double) -> Unit,
     onUndo: (commitmentId: String) -> Unit,
+    onSetRestDay: (resting: Boolean) -> Unit,
     onCreateArc: () -> Unit,
     onRemix: (sourceArcId: String) -> Unit,
     onViewRecap: (sourceArcId: String) -> Unit,
@@ -177,6 +180,7 @@ fun TodayScreen(
                 onDurationChange = onDurationChange,
                 onLogChange = onLogChange,
                 onUndo = onUndo,
+                onSetRestDay = onSetRestDay,
                 modifier = modifier,
             )
     }
@@ -190,6 +194,7 @@ private fun TodayContent(
     onDurationChange: (String, Double) -> Unit,
     onLogChange: (String, Double) -> Unit,
     onUndo: (String) -> Unit,
+    onSetRestDay: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
@@ -204,6 +209,17 @@ private fun TodayContent(
                 Text("Today: ${state.todayState.label()}", style = MaterialTheme.typography.bodyMedium)
             }
         }
+        // Commitments below stay usable on a rest day — finishing them all
+        // makes today complete and hands the token back (R5/R6).
+        state.restDayRow?.let { row ->
+            item {
+                RestDayCard(
+                    row = row,
+                    tokensLeft = state.restTokensLeftThisWeek,
+                    onSetRestDay = onSetRestDay,
+                )
+            }
+        }
         items(state.commitments, key = { it.id }) { commitment ->
             CommitmentCard(
                 commitment = commitment,
@@ -213,6 +229,44 @@ private fun TodayContent(
                 onLogChange = { value -> onLogChange(commitment.id, value) },
                 onUndo = { onUndo(commitment.id) },
             )
+        }
+    }
+}
+
+// docs/tasks/17 — stock Material 3, same Card as the commitment rows. Whether
+// it shows at all, and which form, is decided by TodayUiState.Loaded.restDayRow.
+@Composable
+private fun RestDayCard(
+    row: RestDayRow,
+    tokensLeft: Int,
+    onSetRestDay: (Boolean) -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            when (row) {
+                RestDayRow.OFFER -> {
+                    Text("Need a rest day?", style = MaterialTheme.typography.titleMedium)
+                    Text("$tokensLeft left this week", style = MaterialTheme.typography.labelMedium)
+                    OutlinedButton(onClick = { onSetRestDay(true) }) { Text("Rest today") }
+                    Text(
+                        "It's only used if today ends unfinished. Finish everything anyway and you keep it.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                RestDayRow.RESTING -> {
+                    Text("Today is a rest day", style = MaterialTheme.typography.titleMedium)
+                    Text("Your rest day for this week", style = MaterialTheme.typography.labelMedium)
+                    Text(
+                        "Your streak carries on. If you end up finishing everything anyway, " +
+                            "the rest day isn't used and you keep it.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    OutlinedButton(onClick = { onSetRestDay(false) }) { Text("Not resting after all") }
+                }
+            }
         }
     }
 }
@@ -482,6 +536,8 @@ private fun fakeLoadedState() = TodayUiState.Loaded(
         fakeCommitment("3", "Read", CommitmentType.DURATION, isRequired = false, targetValue = 20.0, unit = "minutes"),
         fakeCommitment("4", "Weight", CommitmentType.LOG, unit = "kg"),
     ),
+    strictness = Strictness.STANDARD,
+    restTokensLeftThisWeek = 1,
 )
 
 @Preview(showBackground = true, name = "Today screen")
@@ -497,10 +553,19 @@ private fun TodayScreenPreview() {
             onDurationChange = { _, _ -> },
             onLogChange = { _, _ -> },
             onUndo = {},
+            onSetRestDay = {},
             onCreateArc = {},
             onRemix = {},
             onViewRecap = {},
         )
+    }
+}
+
+@Preview(showBackground = true, name = "Rest day — resting")
+@Composable
+private fun RestDayRestingPreview() {
+    StreakTheme {
+        RestDayCard(row = RestDayRow.RESTING, tokensLeft = 0, onSetRestDay = {})
     }
 }
 

@@ -7,6 +7,7 @@ import dev.priyanshu.arc.domain.model.ArcStatus
 import dev.priyanshu.arc.domain.model.Commitment
 import dev.priyanshu.arc.domain.model.CommitmentType
 import dev.priyanshu.arc.domain.model.Day
+import dev.priyanshu.arc.domain.model.DayState
 import dev.priyanshu.arc.domain.model.Entry
 import dev.priyanshu.arc.domain.model.MilestoneKind
 import dev.priyanshu.arc.domain.model.ScheduleType
@@ -410,6 +411,107 @@ class ArcRepositoryTest {
         // Every one shown was acknowledged.
         pending.forEach { assertNotNull(byId.getValue(it.id).acknowledgedAt) }
     }
+
+    // Task 17 — the rest-day toggle writes one days row and only ever flips
+    // rest_token_used on it. Marking a date with no row yet creates it through
+    // ensureDay (same path as recordEntry); unmarking and re-marking reuse that
+    // same row, never delete it, and bump updated_at on every write.
+    @Test
+    fun `rest day mark, unmark, mark again reuses one row and bumps updated_at`() = runTest {
+        val arcId = createRestDayArc()
+        val dayDao = database.dayDao()
+        assertNull(dayDao.getByArcAndDate(arcId, today.toString()))
+
+        // Mark, with no existing day row.
+        val markedAt = clock.millis()
+        repository.setRestTokenUsed(arcId, today, used = true)
+        val marked = requireNotNull(dayDao.getByArcAndDate(arcId, today.toString()))
+        assertEquals(1, marked.restTokenUsed)
+        assertEquals(markedAt, marked.createdAt)
+        assertEquals(markedAt, marked.updatedAt)
+        assertEquals(DayState.REST, repository.observeResolution(arcId).first().dayStates[today])
+
+        // Unmark: same row, flag cleared, nothing deleted.
+        clock.advanceTo(LocalDateTime.of(today, LocalTime.of(11, 0)))
+        repository.setRestTokenUsed(arcId, today, used = false)
+        val unmarked = requireNotNull(dayDao.getByArcAndDate(arcId, today.toString()))
+        assertEquals(marked.id, unmarked.id)
+        assertEquals(0, unmarked.restTokenUsed)
+        assertNull(unmarked.deletedAt)
+        assertEquals(clock.millis(), unmarked.updatedAt)
+        assertEquals(1, countDayRowsIncludingDeleted(arcId, today))
+        assertEquals(DayState.PENDING, repository.observeResolution(arcId).first().dayStates[today])
+
+        // Mark again: still the same row.
+        clock.advanceTo(LocalDateTime.of(today, LocalTime.of(12, 0)))
+        repository.setRestTokenUsed(arcId, today, used = true)
+        val remarked = requireNotNull(dayDao.getByArcAndDate(arcId, today.toString()))
+        assertEquals(marked.id, remarked.id)
+        assertEquals(1, remarked.restTokenUsed)
+        assertEquals(markedAt, remarked.createdAt)
+        assertEquals(clock.millis(), remarked.updatedAt)
+        assertEquals(1, countDayRowsIncludingDeleted(arcId, today))
+        assertEquals(DayState.REST, repository.observeResolution(arcId).first().dayStates[today])
+    }
+
+    // A soft-deleted day still holds the (arc_id, date) unique index. Writing
+    // to that date again must revive the same row rather than crash in
+    // ensureDay (DayDao.upsert used to be ON CONFLICT DO NOTHING). Nothing in
+    // the app soft-deletes a day yet, so the row is killed with raw SQL here.
+    @Test
+    fun `marking a rest day on a soft-deleted day row revives that row`() = runTest {
+        val arcId = createRestDayArc()
+        repository.setRestTokenUsed(arcId, today, used = true)
+        val original = requireNotNull(database.dayDao().getByArcAndDate(arcId, today.toString()))
+        database.openHelper.writableDatabase.execSQL(
+            "UPDATE days SET deleted_at = ?, updated_at = ? WHERE id = ?",
+            arrayOf<Any?>(clock.millis(), clock.millis(), original.id),
+        )
+        assertNull(database.dayDao().getByArcAndDate(arcId, today.toString()))
+
+        clock.advanceTo(LocalDateTime.of(today, LocalTime.of(11, 0)))
+        repository.setRestTokenUsed(arcId, today, used = true)
+
+        val revived = requireNotNull(database.dayDao().getByArcAndDate(arcId, today.toString()))
+        assertEquals(original.id, revived.id)
+        assertNull(revived.deletedAt)
+        assertEquals(1, revived.restTokenUsed)
+        assertEquals(clock.millis(), revived.updatedAt)
+        assertEquals(1, countDayRowsIncludingDeleted(arcId, today))
+    }
+
+    // STANDARD with 1 token per week so a flagged, unfinished today resolves
+    // to REST (R5, R6). One required daily commitment, nothing recorded.
+    private suspend fun createRestDayArc(): String {
+        val result = repository.createArc(
+            name = "Rest Day",
+            startDate = startDate,
+            endDate = endDate,
+            strictness = Strictness.STANDARD,
+            restTokensPerWeek = 1,
+            backfillDays = 2,
+            dayBoundaryHour = 4,
+            commitments = listOf(
+                NewCommitment(
+                    name = "Meditate",
+                    type = CommitmentType.BINARY,
+                    isRequired = true,
+                    scheduleType = ScheduleType.DAILY,
+                ),
+            ),
+        )
+        return (result as CreateArcResult.Created).arcId
+    }
+
+    // getByArcAndDate filters out soft-deleted rows, so it can't prove that
+    // nothing was deleted. This counts every row for the date, dead or alive.
+    private fun countDayRowsIncludingDeleted(arcId: String, date: LocalDate): Int =
+        database.openHelper.readableDatabase
+            .query("SELECT COUNT(*) FROM days WHERE arc_id = ? AND date = ?", arrayOf<Any?>(arcId, date.toString()))
+            .use { cursor ->
+                cursor.moveToFirst()
+                cursor.getInt(0)
+            }
 
     // start 2026-09-01 .. end 2026-09-20, opened on 2026-09-16: p25/p50/p75 all
     // crossed (days 5/10/15), final not yet. CHILL so the arc stays active and

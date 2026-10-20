@@ -8,6 +8,7 @@ import dev.priyanshu.arc.data.CreateArcResult
 import dev.priyanshu.arc.data.FakeClock
 import dev.priyanshu.arc.data.NewCommitment
 import dev.priyanshu.arc.domain.model.CommitmentType
+import dev.priyanshu.arc.domain.model.DayState
 import dev.priyanshu.arc.domain.model.MilestoneKind
 import dev.priyanshu.arc.domain.model.ScheduleType
 import dev.priyanshu.arc.domain.model.Strictness
@@ -23,6 +24,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -224,5 +226,103 @@ class TodayViewModelTest {
         )
         // Reflection attaches to the latest milestone on the card (p75).
         assertEquals(pending.rows.last().id, pending.reflectionTargetId)
+    }
+
+    // Task 17 — the rest-day row. Arc runs Mon 2026-09-07 .. 2026-10-06, one
+    // required daily commitment, opened Thu 2026-09-10 (ISO week 2026-W37).
+    private val restWeekToday = LocalDate.of(2026, 9, 10)
+
+    private suspend fun createRestArc(
+        repository: ArcRepository,
+        strictness: Strictness,
+        startDate: LocalDate = LocalDate.of(2026, 9, 7),
+    ): Pair<String, String> {
+        val result = repository.createArc(
+            name = "Rest Arc",
+            startDate = startDate,
+            endDate = LocalDate.of(2026, 10, 6),
+            strictness = strictness,
+            restTokensPerWeek = 1,
+            backfillDays = 2,
+            dayBoundaryHour = 4,
+            commitments = listOf(
+                NewCommitment(
+                    name = "Meditate",
+                    type = CommitmentType.BINARY,
+                    isRequired = true,
+                    scheduleType = ScheduleType.DAILY,
+                ),
+            ),
+        )
+        val arcId = (result as CreateArcResult.Created).arcId
+        return arcId to repository.getCommitments(arcId).single().id
+    }
+
+    private suspend fun TodayViewModel.loaded(): TodayUiState.Loaded =
+        state.first { it is TodayUiState.Loaded } as TodayUiState.Loaded
+
+    @Test
+    fun `standard arc offers a rest day, and resting then not resting flips the row`() = runTest {
+        val clock = FakeClock(LocalDateTime.of(restWeekToday, LocalTime.of(10, 0)))
+        val repository = repository(clock)
+        createRestArc(repository, Strictness.STANDARD)
+        val viewModel = TodayViewModel(repository, clock)
+
+        val offered = viewModel.loaded()
+        assertEquals(RestDayRow.OFFER, offered.restDayRow)
+        assertEquals(1, offered.restTokensLeftThisWeek)
+
+        viewModel.setRestDay(true)
+        val resting = viewModel.state.first { (it as? TodayUiState.Loaded)?.todayState == DayState.REST }
+            as TodayUiState.Loaded
+        assertEquals(RestDayRow.RESTING, resting.restDayRow)
+        assertEquals(0, resting.restTokensLeftThisWeek)
+
+        viewModel.setRestDay(false)
+        val backToPending = viewModel.state.first { (it as? TodayUiState.Loaded)?.todayState == DayState.PENDING }
+            as TodayUiState.Loaded
+        assertEquals(RestDayRow.OFFER, backToPending.restDayRow)
+        assertEquals(1, backToPending.restTokensLeftThisWeek)
+    }
+
+    @Test
+    fun `no rest-day row once today is complete`() = runTest {
+        val clock = FakeClock(LocalDateTime.of(restWeekToday, LocalTime.of(10, 0)))
+        val repository = repository(clock)
+        val (arcId, commitmentId) = createRestArc(repository, Strictness.STANDARD)
+        repository.recordEntry(arcId, restWeekToday, commitmentId, 1.0)
+        val viewModel = TodayViewModel(repository, clock)
+
+        val state = viewModel.loaded()
+        assertEquals(DayState.COMPLETE, state.todayState)
+        assertNull(state.restDayRow)
+    }
+
+    // Starts today: started on the Monday, its missed Monday would already be
+    // sealed by Thursday and fail the arc (R9), so Today would show Ended.
+    @Test
+    fun `no rest-day row on a strict arc`() = runTest {
+        val clock = FakeClock(LocalDateTime.of(restWeekToday, LocalTime.of(10, 0)))
+        val repository = repository(clock)
+        createRestArc(repository, Strictness.STRICT, startDate = restWeekToday)
+        val viewModel = TodayViewModel(repository, clock)
+
+        assertNull(viewModel.loaded().restDayRow)
+    }
+
+    // Tue 2026-09-08 is flagged and missed, so it takes this week's only
+    // token (R6) — nothing left to offer today.
+    @Test
+    fun `no rest-day row when this week's token is already used`() = runTest {
+        val clock = FakeClock(LocalDateTime.of(restWeekToday, LocalTime.of(10, 0)))
+        val repository = repository(clock)
+        val (arcId, _) = createRestArc(repository, Strictness.STANDARD)
+        repository.setRestTokenUsed(arcId, LocalDate.of(2026, 9, 8), used = true)
+        val viewModel = TodayViewModel(repository, clock)
+
+        val state = viewModel.loaded()
+        assertEquals(DayState.PENDING, state.todayState)
+        assertEquals(0, state.restTokensLeftThisWeek)
+        assertNull(state.restDayRow)
     }
 }
