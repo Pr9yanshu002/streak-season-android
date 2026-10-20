@@ -50,4 +50,7 @@ tasks.processTestResources {
 tasks.test {
     dependsOn(copyFixtures)
     useJUnitPlatform()
+    // So FixtureLoader's "Skipping placeholder fixture" lines show in the
+    // Gradle output instead of only in the HTML report.
+    testLogging.showStandardStreams = true
 }
