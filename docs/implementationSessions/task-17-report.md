@@ -62,3 +62,15 @@ trivially.
 
 Three of the four new fixtures are regression guards rather than red tests. They pin behaviour
 that the Part 2 engine change must not break.
+
+## Follow-up: placeholders written
+
+Priyanshu wrote both placeholder fixtures. Review changed one value: `rest_today_reserves_token`
+expected `current_streak` 0, but today resolves to `rest`, not `pending`, so R11 counts it and
+the value is 1. That has been corrected.
+
+`./gradlew :domain:test` now runs 161 tests with 2 failures and nothing skipped:
+- 🔴 `rest_today_counts_toward_streak`: today expected `REST`, got `PENDING`.
+- 🔴 `rest_today_reserves_token`: today expected `REST`, got `PENDING`. Same cause as above.
+- 🟢 `rest_today_second_flag_in_week_invalid`: passes on the current engine. It guards that
+  today's flag is refused when an earlier day that week already used the token.

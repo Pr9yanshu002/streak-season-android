@@ -1,1 +1,40 @@
-{"TODO": "Priyanshu writes this"}
+{
+  "id": "rest_today_second_flag_in_week_invalid",
+  "rules": ["R5", "R6"],
+  "description": "Standard arc, 1 rest token per week. An earlier missed day this week is flagged, and today is also flagged with nothing logged. The earliest flag wins: the earlier day resolves to rest and uses the token. Today’s flag is invalid, so today stays pending, and the week has 0 tokens left (R5, R6)",
+  "now": "2026-01-15T10:00:00",
+  "arc": {
+    "id": "arc-1",
+    "name": "75 Hard",
+    "start_date": "2026-01-12",
+    "end_date": "2026-02-12",
+    "status": "active",
+    "strictness": "standard",
+    "rest_tokens_per_week": 1,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+  "commitments": [
+    {
+      "id": "c-gym",
+      "name": "Gym",
+      "type": "binary",
+      "is_required": true,
+      "schedule_type": "daily",
+      "active_from": "2026-01-12"
+    }
+  ],
+  "days": [
+    { "date": "2026-01-12", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-13", "entries": { "c-gym": 1 }},
+    { "date": "2026-01-14", "entries": {},"rest_token_used": true },
+    { "date": "2026-01-15", "entries": {},"rest_token_used": true }
+  ],
+  "expect": {
+    "day_states": {
+      "2026-01-14": "rest",
+      "2026-01-15": "pending"
+    },
+    "rest_tokens_remaining": { "2026-W03": 0 }
+  }
+}
