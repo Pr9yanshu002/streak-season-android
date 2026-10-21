@@ -325,4 +325,77 @@ class TodayViewModelTest {
         assertEquals(0, state.restTokensLeftThisWeek)
         assertNull(state.restDayRow)
     }
+
+    // Task 18 — what the redesigned Loaded state carries, all mapped from
+    // Resolution. Arc starts Wed 2026-09-09, opened Fri 2026-09-11. Wed and Thu
+    // are complete; today has Meditate done and Water at 1 of 3. Long walk is
+    // required but weekends only, so it's NOT_SCHEDULED today.
+    @Test
+    fun `loaded state maps order, required counts, week and schedule text from Resolution`() = runTest {
+        val today = LocalDate.of(2026, 9, 11)
+        val clock = FakeClock(LocalDateTime.of(today, LocalTime.of(10, 0)))
+        val repository = repository(clock)
+        val result = repository.createArc(
+            name = "Week Arc",
+            startDate = LocalDate.of(2026, 9, 9),
+            endDate = LocalDate.of(2026, 10, 9),
+            strictness = Strictness.STANDARD,
+            restTokensPerWeek = 1,
+            backfillDays = 2,
+            dayBoundaryHour = 4,
+            // Deliberately not in display order: the mapper reorders.
+            commitments = listOf(
+                NewCommitment(name = "Meditate", type = CommitmentType.BINARY, isRequired = true, scheduleType = ScheduleType.DAILY),
+                NewCommitment(
+                    name = "Long walk", type = CommitmentType.BINARY, isRequired = true,
+                    scheduleType = ScheduleType.WEEKDAYS, scheduleDays = "6,7",
+                ),
+                NewCommitment(
+                    name = "Read", type = CommitmentType.DURATION, targetValue = 20.0, isRequired = false,
+                    scheduleType = ScheduleType.DAILY,
+                ),
+                NewCommitment(
+                    name = "Water", type = CommitmentType.COUNTER, targetValue = 3.0, unit = "glasses",
+                    isRequired = true, scheduleType = ScheduleType.DAILY,
+                ),
+            ),
+        )
+        val arcId = (result as CreateArcResult.Created).arcId
+        val ids = repository.getCommitments(arcId).associate { it.name to it.id }
+        for (date in listOf(LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10))) {
+            repository.recordEntry(arcId, date, ids.getValue("Meditate"), 1.0)
+            repository.recordEntry(arcId, date, ids.getValue("Water"), 3.0)
+        }
+        repository.recordEntry(arcId, today, ids.getValue("Meditate"), 1.0)
+        repository.recordEntry(arcId, today, ids.getValue("Water"), 1.0)
+
+        val viewModel = TodayViewModel(repository, clock)
+        val state = viewModel.state.first { it is TodayUiState.Loaded } as TodayUiState.Loaded
+
+        // Required, then bonus, then not today.
+        assertEquals(listOf("Meditate", "Water", "Read", "Long walk"), state.commitments.map { it.name })
+        val longWalk = state.commitments.last()
+        assertEquals(false, longWalk.isScheduledToday)
+        assertEquals("Saturdays and Sundays", longWalk.scheduleText)
+        assertEquals("Every day", state.commitments.first().scheduleText)
+
+        // Long walk is required but not scheduled today, so it isn't counted.
+        assertEquals(1, state.requiredDone)
+        assertEquals(2, state.requiredTotal)
+
+        // Pending today is skipped by R11; Wed and Thu count.
+        assertEquals(2, state.currentStreak)
+        assertEquals(false, state.isDayComplete)
+
+        // Mon 7 .. Sun 13. The arc starts Wednesday, so Mon/Tue are empty slots.
+        assertEquals(
+            listOf(
+                DayState.OUT_OF_RANGE, DayState.OUT_OF_RANGE, DayState.COMPLETE, DayState.COMPLETE,
+                DayState.PENDING, DayState.FUTURE, DayState.FUTURE,
+            ),
+            state.week.map { it.state },
+        )
+        assertEquals(LocalDate.of(2026, 9, 7), state.week.first().date)
+        assertEquals(listOf(false, false, false, false, true, false, false), state.week.map { it.isToday })
+    }
 }

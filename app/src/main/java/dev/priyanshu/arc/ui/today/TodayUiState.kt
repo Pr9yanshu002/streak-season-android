@@ -4,6 +4,7 @@ import dev.priyanshu.arc.domain.model.CommitmentType
 import dev.priyanshu.arc.domain.model.DayState
 import dev.priyanshu.arc.domain.model.MilestoneKind
 import dev.priyanshu.arc.domain.model.Strictness
+import dev.priyanshu.arc.ui.components.WeekStripDay
 import java.time.LocalDate
 
 sealed interface TodayUiState {
@@ -33,12 +34,28 @@ sealed interface TodayUiState {
         val totalDays: Int,
         val today: LocalDate,
         val todayState: DayState,
+        // Ordered for display (docs/tasks/18): required scheduled today, then
+        // bonus scheduled today, then everything not scheduled today.
         val commitments: List<CommitmentUiState>,
+        // Resolution.currentStreak (R11).
+        val currentStreak: Int,
+        // "X of Y required done": required commitments scheduled today (Y)
+        // and how many of those the engine marked DONE (X). Both are tallies
+        // of Resolution.commitmentStatuses[today] — no R3/R4 decision here.
+        val requiredDone: Int,
+        val requiredTotal: Int,
+        // This ISO week, Monday to Sunday. Dates are calendar arithmetic; each
+        // state is Resolution.dayStates[date], OUT_OF_RANGE outside the arc.
+        val week: List<WeekStripDay>,
         val strictness: Strictness,
         // Resolution.restTokensRemaining for today's ISO week (R6), read off
         // the engine by its own week key — never counted here.
         val restTokensLeftThisWeek: Int,
     ) : TodayUiState {
+        // The engine already decided today's state; this only names the case
+        // the "Day N done" layout keys off (design 02).
+        val isDayComplete: Boolean get() = todayState == DayState.COMPLETE
+
         // docs/tasks/17 — which rest-day row to show, or null for none. Shown
         // only on a standard arc (R6: strict and chill have no tokens), never
         // on a complete day (the flag would be ignored), and only when today
@@ -66,6 +83,12 @@ data class CommitmentUiState(
     // null means no entry exists yet today.
     val currentValue: Double?,
     val isSatisfied: Boolean,
+    // false when Resolution says NOT_SCHEDULED for today (R3) — shown as a
+    // muted "Not today" row instead of a card.
+    val isScheduledToday: Boolean,
+    // formatSchedule() of the commitment's weekdays, e.g. "Saturdays and
+    // Sundays". null when there's nothing to describe.
+    val scheduleText: String?,
 )
 
 // What the Today screen shows for pending milestones (R12). One pending

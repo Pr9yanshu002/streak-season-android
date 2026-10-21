@@ -130,7 +130,8 @@ fun BinaryCommitmentCard(
  * "X of Y unit", − and + buttons, and a progress bar toward the target.
  *
  * [isDone] switches to the design-02 look: evergreen-soft card, a tick disc
- * in front, the caption in evergreen ending "· done", no progress bar.
+ * in front, the caption in evergreen ending "· done", no progress bar, and
+ * the + button outlined instead of filled. − is hidden while [current] is 0.
  * [captionSuffix] appends " · <text>" to the caption (design 02's bonus row
  * uses "doesn't affect your day"). [step] is what one tap adds or removes —
  * the data model has no per-commitment step, so callers pass 1.
@@ -187,15 +188,21 @@ fun CounterCommitmentCard(
                 Text(caption, style = MaterialTheme.typography.bodySmall, color = if (isDone) evergreen else muted)
             }
             val stepText = formatAmount(step) + unitText
-            RoundIconButton(
-                glyph = StrokeGlyph.MINUS,
-                filled = false,
-                contentDescription = "Remove $stepText from $name",
-                onClick = onDecrement,
-            )
+            // Design 03: nothing to remove at 0, so no − button.
+            if (current > 0.0) {
+                RoundIconButton(
+                    glyph = StrokeGlyph.MINUS,
+                    filled = false,
+                    contentDescription = "Remove $stepText from $name",
+                    onClick = onDecrement,
+                )
+            }
+            // + stays once the target is met (counting past it still works and
+            // still feeds the recap totals), but drops to the outline style so
+            // the card no longer pushes for more.
             RoundIconButton(
                 glyph = StrokeGlyph.PLUS,
-                filled = true,
+                filled = !isDone,
                 contentDescription = "Add $stepText to $name",
                 onClick = onIncrement,
             )

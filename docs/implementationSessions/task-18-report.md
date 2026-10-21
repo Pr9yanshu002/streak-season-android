@@ -123,3 +123,118 @@ Type the theme doesn't have:
 ### Tests
 
 `./gradlew :app:testDebugUnitTest`: 46 / 46 (42 existing + 4 new).
+
+---
+
+## Part 2 — the active day (designs 01, 02, 03)
+
+### Decisions from the Part 1 review, applied
+
+1. **Counter step:** stays 1. A step field will be its own task.
+2. **Schedule text:** `formatSchedule(days: Set<DayOfWeek>)` in `ui/today/ScheduleText.kt` gives
+   "Every day", "Weekdays", "Saturdays and Sundays", or "Mon, Wed, Fri". It's covered by
+   `ScheduleTextTest` (4 cases). The mapper turns DAILY into all seven days and parses
+   WEEKDAYS' `'6,7'` into `DayOfWeek`s. Whether a commitment is scheduled today is still only
+   Resolution's `NOT_SCHEDULED` (R3).
+3. **Binary card:** "Not done yet" kept.
+4. **Finished counter:** + stays, but switches from filled to the outline style once the target
+   is met.
+5. **Reversed strip:** `WeekStrip(reversed = true)` is a parameter on the same component, with
+   `DayDisc(reversed = …)` underneath. It has its own light and dark preview
+   (`WeekStripReversedPreview`), which also shows partial, missed and rest reversed for reference.
+
+### What changed
+
+- **`TodayUiState.Loaded`** gains these fields:
+  - `currentStreak` (`Resolution.currentStreak`)
+  - `requiredDone` / `requiredTotal`
+  - `week` (seven `WeekStripDay`s)
+  - `isDayComplete`, a getter on `todayState == COMPLETE`
+- **`CommitmentUiState`** gains `isScheduledToday` and `scheduleText`.
+- **Commitment order:** unscheduled commitments are no longer dropped. The mapper orders the
+  list as required, then bonus, then not today, keeping arc order within each group.
+- **Week strip:** the dates run from this ISO Monday to Sunday (date arithmetic in the mapper).
+  Each state is `Resolution.dayStates[date]`, and dates outside the arc are `OUT_OF_RANGE`, drawn
+  as an empty slot.
+- **`TodayScreen`'s Loaded branch is rebuilt** from the Part 1 components:
+  - **In progress (01):** header (arc name, "Wednesday 21 January", `StreakPill` hidden at 0),
+    "Day N of M", `WeekStrip`, "Today" with "X of Y required done", the cards, and the rest offer
+    at the bottom.
+  - **Day complete (02):** an evergreen card with a tick, "Day N done", "Everything required, N
+    days in a row." and the reversed strip. The count turns evergreen. An unfinished bonus
+    counter reads "· doesn't affect your day". The rest card is hidden (restDayRow is null on a
+    complete day, as in task 17).
+  - **Rest day (03):** the resting card sits above the strip. The cards come under "Still here if
+    you want them / Anything you log today still counts." and stay fully usable.
+- **Removed:**
+  - the stock controls (`CommitmentCard`, `BinaryControl`, `StepperControl`, `LogControl`)
+  - task 17's private `RestDayCard`
+  - `DayState.label()`
+  - the old previews
+
+  New `@PreviewLightDark` previews cover in-progress, complete and resting.
+- **Hard-coded colours:** none to fix. The task-16 report found none on Today, and there are
+  none now.
+
+### Data rules: one point to check
+
+**"X of Y required done" is counted in the mapper.**
+- Y = required commitments the engine didn't mark `NOT_SCHEDULED` today. X = those it marked
+  `DONE`.
+- `Resolution` has no ready-made count, and `:domain` wasn't changed.
+- It's a tally of the engine's per-commitment answers, with no R3/R4 decision repeated in `:app`.
+- If you'd rather the engine expose it, it can move into `Resolution`.
+- When Y is 0 the count is hidden rather than showing "0 of 0".
+
+### Design details not matched
+
+- **Design 02's logged weight** ("Logged today · 75.6 kg" with a pencil button) isn't built.
+  The number card always shows its field, which keeps task 10's save behaviour as is. The logged
+  variant would add an edit mode, so I'm leaving it for your call.
+- **Design 03 merges the unscheduled rows into one** ("Gym · Long walk / Not today"). I kept one
+  row per commitment, each with its schedule text, as in 01 and 02.
+- **Design 03 hides − on a counter at 0.** I did the same. The old − at 0 wrote a 0-value entry,
+  which changed nothing the engine reads.
+- **No "Undo" button.** The designs don't have one:
+  - A binary is unticked by tapping it again (writes 0).
+  - A counter steps down to 0.
+  - A number field is cleared by blanking it, which still calls the same undo.
+
+  In every case the engine resolves the day exactly as before.
+- **Duration unit:** duration cards still say "min" whatever unit is stored, the same as before.
+
+### Edge to know about
+
+A commitment whose `active_from` is after today shows as "Not today · <schedule>". That's
+misleading, since the real reason is "not started yet", but it can't happen today: `createArc`
+pins every commitment's `active_from` to the arc start, and there's no "add a commitment
+mid-arc" flow yet.
+
+### Spacing and type
+
+- Sections are 20 dp apart (`s4 + s1`) and cards 12 dp apart (`s2 + s1`), with 24 dp page
+  padding (`s6`).
+- The 13 sp regular text ("Everything required, …", "Anything you log today still counts.") uses
+  `labelLarge` at normal weight. There is no 13 sp regular token.
+- No tokens added.
+
+### Emulator
+
+- The debug build installs and launches.
+- The running emulator has no active arc, so it shows the existing no-arc screen (Part 3's job).
+  I didn't open the debug menu to reseed, because that wipes the database.
+- To reach the three Loaded layouts, reseed `active-mid-arc` from the debug menu. That is a
+  standard arc with 1 token, and today is left pending. From there:
+  - **In progress:** this is what you see first. Yesterday is seeded as partial, so the current
+    streak is 0 and the `StreakPill` is hidden. That is correct, not a bug.
+  - **Rest day:** tap "Rest today". The offer only appears if this ISO week still has its token.
+    The seed's rest day is 5 days back, so on a Monday–Friday it falls in the previous week and
+    the offer shows.
+  - **Day complete:** tick Meditate, take Push-ups to 30 (weekdays only) and enter a Weight.
+
+### Tests
+
+- `./gradlew :domain:test`: 161 / 161.
+- `./gradlew :app:testDebugUnitTest`: 51 / 51 (46 + 4 `ScheduleTextTest` + 1 new
+  `TodayViewModelTest` case covering ordering, required counts, the week's states and empty
+  slots, schedule text and streak).

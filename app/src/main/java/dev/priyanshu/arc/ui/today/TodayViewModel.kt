@@ -7,10 +7,14 @@ import dev.priyanshu.arc.data.Clock
 import dev.priyanshu.arc.data.PendingMilestone
 import dev.priyanshu.arc.data.TodaySnapshot
 import dev.priyanshu.arc.domain.model.ArcStatus
+import dev.priyanshu.arc.domain.model.Commitment
 import dev.priyanshu.arc.domain.model.CommitmentStatus
 import dev.priyanshu.arc.domain.model.DayState
 import dev.priyanshu.arc.domain.model.MilestoneKind
+import dev.priyanshu.arc.domain.model.ScheduleType
 import dev.priyanshu.arc.domain.rules.isoWeekKey
+import dev.priyanshu.arc.ui.components.WeekStripDay
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.Job
@@ -177,9 +181,8 @@ private fun TodaySnapshot.toUiState(): TodayUiState {
         ?: return TodayUiState.NotStarted(arcName = arc.name, startDate = arc.startDate)
 
     val entriesByCommitmentId = todayEntries.associateBy { it.commitmentId }
-    val commitmentStates = commitments.mapNotNull { commitment ->
+    val commitmentStates = commitments.map { commitment ->
         val status = statusesForToday.getValue(commitment.id)
-        if (status == CommitmentStatus.NOT_SCHEDULED) return@mapNotNull null
         CommitmentUiState(
             id = commitment.id,
             name = commitment.name,
@@ -189,6 +192,31 @@ private fun TodaySnapshot.toUiState(): TodayUiState {
             unit = commitment.unit,
             currentValue = entriesByCommitmentId[commitment.id]?.value,
             isSatisfied = status == CommitmentStatus.DONE,
+            isScheduledToday = status != CommitmentStatus.NOT_SCHEDULED,
+            scheduleText = commitment.scheduleText(),
+        )
+    }
+    // Display order (docs/tasks/18): required, then bonus, then not today.
+    // sortedBy is stable, so each group keeps the arc's own commitment order.
+    val ordered = commitmentStates.sortedBy { c ->
+        when {
+            !c.isScheduledToday -> 2
+            c.isRequired -> 0
+            else -> 1
+        }
+    }
+    val requiredToday = commitmentStates.filter { it.isRequired && it.isScheduledToday }
+
+    // This ISO week's dates (Monday to Sunday) are plain calendar arithmetic;
+    // every state is read from Resolution.dayStates, which only holds dates
+    // inside the arc — anything else is an empty slot.
+    val monday = today.with(DayOfWeek.MONDAY)
+    val week = (0L..6L).map { offset ->
+        val date = monday.plusDays(offset)
+        WeekStripDay(
+            date = date,
+            state = resolution.dayStates[date] ?: DayState.OUT_OF_RANGE,
+            isToday = date == today,
         )
     }
 
@@ -198,12 +226,33 @@ private fun TodaySnapshot.toUiState(): TodayUiState {
         totalDays = resolution.totalDays,
         today = today,
         todayState = resolution.dayStates[today] ?: DayState.PENDING,
-        commitments = commitmentStates,
+        commitments = ordered,
+        currentStreak = resolution.currentStreak,
+        requiredDone = requiredToday.count { it.isSatisfied },
+        requiredTotal = requiredToday.size,
+        week = week,
         strictness = arc.strictness,
         // R6 — a lookup by the engine's own week key, not a count. Every week
         // the arc's range touches has an entry, so ?: 0 is only a fallback.
         restTokensLeftThisWeek = resolution.restTokensRemaining[isoWeekKey(today)] ?: 0,
     )
+}
+
+// The commitment's weekdays in words, for the "Not today · …" row. Daily is
+// all seven days; WEEKDAYS reads the stored '1,3,5' list (ISO numbers,
+// Mon = 1). This describes the schedule; it never decides whether a date is
+// scheduled — that is Resolution's NOT_SCHEDULED (R3).
+private fun Commitment.scheduleText(): String? {
+    val days = when (scheduleType) {
+        ScheduleType.DAILY -> DayOfWeek.entries.toSet()
+        ScheduleType.WEEKDAYS -> scheduleDays.orEmpty()
+            .split(",")
+            .mapNotNull { it.trim().toIntOrNull() }
+            .filter { it in 1..7 }
+            .map { DayOfWeek.of(it) }
+            .toSet()
+    }
+    return formatSchedule(days).ifBlank { null }
 }
 
 // Presentation choice, not a rule (docs/tasks/14): zero pending -> no card,
