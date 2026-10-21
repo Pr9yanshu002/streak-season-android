@@ -238,3 +238,118 @@ mid-arc" flow yet.
 - `./gradlew :app:testDebugUnitTest`: 51 / 51 (46 + 4 `ScheduleTextTest` + 1 new
   `TodayViewModelTest` case covering ordering, required counts, the week's states and empty
   slots, schedule text and streak).
+
+---
+
+## Part 3 — the other states (designs 04–08)
+
+### Repository change (approved)
+
+Design 06's "You wrote …" needs `arcs.intention`, which was stored but never reached Today.
+Priyanshu approved a small change to `ArcRepository`:
+- The private `ArcSnapshot` and the public `TodaySnapshot` each gain `intention: String?`.
+- `observeSnapshot` fills it from the `ArcEntity` it already loads, the same field
+  `getRecapScreenData` reads.
+
+No other repository code changed.
+
+### New components (`ui/components/`)
+
+All three have light and dark previews.
+
+| Component | Used by |
+|---|---|
+| `ProgressPie` | Filled clockwise to a fraction. With a track: larch on larch-soft (milestones, 04/05). Without one: an evergreen outline ring (the no-arc row, 07). |
+| `ReflectionField` | "<label> · optional", a 3-line field in `StreakTheme.type.voice` (Literata italic) on sunken, and a helper line. |
+| `LargeButton` | The full-width 56 dp pill, filled or outlined. |
+
+### States
+
+- **04, single milestone:**
+  - The pie (¼, ½, ¾ or full) above the label in `displayMedium`.
+  - "Day 45 of 90 · 14 January" in larch, then "45 days behind you, 45 ahead.".
+  - "A line for later", "You'll see it again in your recap.", then Continue.
+  - `Single` gains `triggeredOnDate`.
+- **05, several milestones:**
+  - "Winter Arc · Day 70 of 90" and "You've passed N milestones".
+  - One card per milestone with its pie and "Day 23 · 23 December". The latest row has a larch
+    border and "· latest".
+  - The reflection helper names the latest milestone. The collapse rules from task 14 are
+    unchanged.
+  - `Summary` gains `arcName` and `todayDayNumber` (`Resolution.dayNumber`).
+- **06, not started:**
+  - "Starts Monday 6 April · 30 days", the countdown in larch, "days to go" (or "day to go"),
+    and "Nothing to check in yet.".
+  - The "You wrote" card in the voice style, shown only when an intention exists.
+  - "What you'll do": required commitments first, then bonus, with `BonusChip` and
+    `formatSchedule` text.
+  - `NotStarted` gains `totalDays` (from Resolution), `daysToGo` (calendar distance to
+    `start_date`), `intention` and `commitments`.
+- **07, no arc:** the five evergreen pies, "Start an arc", the explainer, the four numbered steps,
+  and "Start an arc". This uses the design's copy.
+- **08, ended:**
+  - "Ended Saturday 28 February": the failure date for a failed arc, the end date for a
+    completed one.
+  - "Ninety days, done." (completed only), then "You showed up / 72 / of 84 days", with a grid of
+    every day as 12 dp discs, seven to a row from the start date.
+  - The recap line, "See your recap" and "Start something new". "Remix this arc" is kept for a
+    failed arc, as before.
+  - `Ended` gains `endedOn`, `season` (every `Resolution.dayStates` value in date order),
+    `daysShowedUp` and `daysCounted`.
+
+### Data rules
+
+- **"You showed up X of Y days"** is the recap's own `complete_days` / `counted_days` (R19).
+  Those need every day's entries, which `TodaySnapshot` doesn't carry, so `TodayViewModel` reads
+  them once from the existing `ArcRepository.getRecapScreenData` (the recap screen's own loader)
+  and caches them per arc. Nothing about R8/R19 is redone in `:app`. They're fetched before the
+  Ended state is published, so the numbers don't pop in later.
+- **"Ninety"** comes from ICU's spell-out (`android.icu.text.MessageFormat("{0,spellout}")`,
+  in the platform since API 24, so no new dependency), capitalised. It's covered by
+  `SpellOutTest` under Robolectric.
+- **`daysToGo` and "N behind you, M ahead"** are calendar arithmetic on dates and numbers the
+  engine already produced (`start_date`, `dayNumber`, `totalDays`).
+
+### Gaps and things not matched
+
+- **Display sizes the theme doesn't have.** None were added. All of these use `displayMedium`
+  (56):
+  - 06's 120 sp countdown
+  - 08's 96 sp "72"
+  - 05's 44 sp title
+- **The intention text** is 20/30 in design 06. `StreakTheme.type.voice` is 18/28, and that's
+  what is used.
+- **Failed arc on 08.** The design only shows a completed arc. For a failed one, the "N days,
+  done." line is left out, and the page shows "Ended <failure date>", "You showed up X of Y" and
+  the same buttons, plus Remix.
+- **FINAL milestone on 04.** There's no "behind you / ahead" line, because "0 ahead" says nothing
+  and a failed arc's days weren't all run. The pie is full for both completed and failed.
+- **Long arcs on 08.** The season grid grows one row per 7 days, so a 365-day arc is about 53
+  rows. The page scrolls (`AnchoredPage`), so nothing is cut off, but on long arcs the grid
+  dominates the page.
+- **Milestone dates** now read "14 January" instead of "14 Jan", as in the design.
+- **Debug button overlap.** The debug-only 🐞 button sits over the bottom button on the
+  bottom-anchored pages (04, 05, 07, 08). This only happens in debug builds.
+- **Previously listed gaps:** the step size, the arc's intention ("You wrote …", now done) and the
+  milestone note ("A line for later", already in the data as `milestones.reflection`) are all
+  covered above or in Parts 1–2.
+
+### Emulator
+
+- **07 (no arc):** checked on the emulator in light and dark, using `cmd uimode night`, then set
+  back to light. It matches the design. The screenshots are in the session, not committed.
+- **04, 05, 06, 08:** each has light and dark `@PreviewLightDark` previews in `TodayScreen.kt`.
+  On the emulator they need a reseed from the debug menu, which wipes the database, so I left
+  that to Priyanshu:
+  - `milestone-pending` → 05
+  - `not-started` → 06
+  - `ended-completed` / `ended-failed` → 08
+
+### Tests
+
+- `./gradlew :domain:test`: 161 / 161.
+- `./gradlew :app:testDebugUnitTest`: 53 / 53. New: one `TodayViewModelTest` case (intention and
+  planned commitments) and `SpellOutTest`. Updated:
+  - the `NotStarted` and `Ended` equality tests, which now cover `endedOn`, `season` and the
+    recap counts
+  - the milestone tests, which now check `triggeredOnDate`, `arcName` and `todayDayNumber`

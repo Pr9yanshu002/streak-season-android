@@ -52,6 +52,9 @@ private data class ArcSnapshot(
     val arc: Arc,
     val commitments: List<Commitment>,
     val days: List<Day>,
+    // arcs.intention — UI-only, not on domain Arc. Carried here so the Today
+    // screen's not-started state can show it (docs/tasks/18, design 06).
+    val intention: String?,
 )
 
 // What the Today screen needs: the resolved Resolution, plus the raw arc,
@@ -63,6 +66,8 @@ data class TodaySnapshot(
     val commitments: List<Commitment>,
     val todayEntries: List<Entry>,
     val resolution: Resolution,
+    // The day-1 "why" (arcs.intention), for design 06's "You wrote" card.
+    val intention: String?,
 )
 
 // Everything the recap screen renders (docs/tasks/15). recap is the engine's
@@ -139,11 +144,12 @@ class ArcRepository(
             dayDao.observeByArc(arcId),
             entryDao.observeByArc(arcId),
         ) { arcEntity, commitmentEntities, dayEntities, entryEntities ->
-            val arc = requireNotNull(arcEntity) { "arc $arcId not found" }.toDomain()
+            val entity = requireNotNull(arcEntity) { "arc $arcId not found" }
+            val arc = entity.toDomain()
             val commitments = commitmentEntities.map { it.toDomain() }
             val entriesByDayId = entryEntities.groupBy { it.dayId }
             val days = dayEntities.map { day -> day.toDomain(entriesByDayId[day.id] ?: emptyList()) }
-            ArcSnapshot(arc, commitments, days)
+            ArcSnapshot(arc, commitments, days, entity.intention)
         }
 
     // Recomputes on every underlying change. RulesEngine.resolve() is a pure,
@@ -159,7 +165,7 @@ class ArcRepository(
         observeSnapshot(arcId).map { snapshot ->
             val resolution = RulesEngine.resolve(snapshot.arc, snapshot.commitments, snapshot.days, clock.now())
             val todayEntries = snapshot.days.find { it.date == resolution.effectiveToday }?.entries ?: emptyList()
-            TodaySnapshot(snapshot.arc, snapshot.commitments, todayEntries, resolution)
+            TodaySnapshot(snapshot.arc, snapshot.commitments, todayEntries, resolution, snapshot.intention)
         }
 
     suspend fun hasAnyArc(): Boolean = arcDao.count() > 0

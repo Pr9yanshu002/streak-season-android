@@ -1,26 +1,29 @@
 package dev.priyanshu.arc.ui.today
 
+import android.icu.text.MessageFormat
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,8 +36,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import dev.priyanshu.arc.domain.model.CommitmentType
@@ -42,9 +46,15 @@ import dev.priyanshu.arc.domain.model.DayState
 import dev.priyanshu.arc.domain.model.MilestoneKind
 import dev.priyanshu.arc.domain.model.Strictness
 import dev.priyanshu.arc.ui.components.BinaryCommitmentCard
+import dev.priyanshu.arc.ui.components.BonusChip
 import dev.priyanshu.arc.ui.components.CounterCommitmentCard
+import dev.priyanshu.arc.ui.components.DayDisc
+import dev.priyanshu.arc.ui.components.LargeButton
 import dev.priyanshu.arc.ui.components.NumberCommitmentCard
+import dev.priyanshu.arc.ui.components.ProgressPie
+import dev.priyanshu.arc.ui.components.ReflectionField
 import dev.priyanshu.arc.ui.components.RestDayCard
+import dev.priyanshu.arc.ui.components.StreakCard
 import dev.priyanshu.arc.ui.components.StreakPill
 import dev.priyanshu.arc.ui.components.StrokeGlyph
 import dev.priyanshu.arc.ui.components.StrokeIcon
@@ -56,6 +66,7 @@ import dev.priyanshu.arc.ui.theme.StreakTheme
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
@@ -139,45 +150,17 @@ fun TodayScreen(
         // is active" (completed/failed/archived) — getActiveArcId() only
         // ever matches status = 'active', so both cases already collapse
         // into this one state; no separate state needed for the second.
-        is TodayUiState.NoActiveArc ->
-            Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text(
-                        "An arc is a time-boxed chapter with daily commitments and a rule set. " +
-                            "Start one to see it here.",
-                        textAlign = TextAlign.Center,
-                    )
-                    Button(onClick = onCreateArc) { Text("Start an arc") }
-                }
-            }
+        is TodayUiState.NoActiveArc -> NoArcContent(onCreateArc = onCreateArc, modifier = modifier)
 
-        is TodayUiState.NotStarted ->
-            Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("${state.arcName} starts ${state.startDate}.")
-            }
+        is TodayUiState.NotStarted -> NotStartedContent(state = state, modifier = modifier)
 
-        is TodayUiState.Ended ->
-            Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text(
-                        if (state.completed) {
-                            "${state.arcName} is complete — ${state.totalDays} days."
-                        } else {
-                            "${state.arcName} ended on ${state.failedOnDate}."
-                        },
-                        textAlign = TextAlign.Center,
-                    )
-                    // Recap is the main thing to do from here (docs/tasks/15);
-                    // the run-again / start-new actions live on its last card.
-                    Button(onClick = { onViewRecap(state.sourceArcId) }) { Text("View recap") }
-                    OutlinedButton(onClick = onCreateArc) { Text("Start a new arc") }
-                    // Remix only makes sense for a failed arc — a completed
-                    // one has nothing to retry.
-                    if (!state.completed) {
-                        OutlinedButton(onClick = { onRemix(state.sourceArcId) }) { Text("Remix this arc") }
-                    }
-                }
-            }
+        is TodayUiState.Ended -> EndedContent(
+            state = state,
+            onViewRecap = onViewRecap,
+            onCreateArc = onCreateArc,
+            onRemix = onRemix,
+            modifier = modifier,
+        )
 
         is TodayUiState.Loaded ->
             TodayContent(
@@ -432,10 +415,44 @@ private fun CommitmentItem(
     }
 }
 
-// Full-screen, stock Material 3 (docs/tasks/12) — no animation, no photo
-// picker. The reflection field is optional: an empty/blank value is passed
-// through as null (ArcRepository.acknowledgeMilestones trims it anyway, but
-// keeping that decision visible here matches LogControl's commit()).
+// A full-height page whose bottom part sits at the bottom of the screen when
+// there's room, and scrolls with the rest when there isn't (designs 04, 05,
+// 07 and 08 all anchor their actions to the bottom). heightIn(min) +
+// SpaceBetween does what a weight() spacer can't inside verticalScroll.
+@Composable
+private fun AnchoredPage(
+    modifier: Modifier,
+    top: @Composable () -> Unit,
+    bottom: @Composable () -> Unit,
+) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .verticalScroll(rememberScrollState())
+                .heightIn(min = maxHeight)
+                .padding(Space.s6),
+            verticalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column { top() }
+            Column(modifier = Modifier.padding(top = Space.s6)) { bottom() }
+        }
+    }
+}
+
+// How far round each milestone's pie is filled (designs 04, 05).
+private fun MilestoneKind.fraction(): Float = when (this) {
+    MilestoneKind.START -> 0f
+    MilestoneKind.P25 -> 0.25f
+    MilestoneKind.P50 -> 0.5f
+    MilestoneKind.P75 -> 0.75f
+    MilestoneKind.FINAL -> 1f
+}
+
+private fun dayCount(n: Int): String = if (n == 1) "1 day" else "$n days"
+
+// Design 04 — one pending milestone takes over the screen (docs/tasks/12).
+// The reflection is optional: blank is passed through as null
+// (ArcRepository.acknowledgeMilestones trims it anyway).
 @Composable
 private fun MilestoneCard(
     milestone: PendingMilestoneUiState.Single,
@@ -443,36 +460,57 @@ private fun MilestoneCard(
     modifier: Modifier = Modifier,
 ) {
     var reflection by remember(milestone.id) { mutableStateOf("") }
-    Column(
-        modifier = modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(milestone.label(), style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "Day ${milestone.dayNumber} of ${milestone.totalDays}",
-            style = MaterialTheme.typography.bodyLarge,
-        )
-        Spacer(Modifier.height(32.dp))
-        OutlinedTextField(
-            value = reflection,
-            onValueChange = { reflection = it },
-            label = { Text("Reflection (optional)") },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(24.dp))
-        Button(onClick = { onAcknowledge(reflection.trim().ifBlank { null }) }) { Text("Continue") }
-    }
+    AnchoredPage(
+        modifier = modifier,
+        top = {
+            Spacer(Modifier.height(Space.s6 + Space.s2))
+            ProgressPie(
+                fraction = milestone.kind.fraction(),
+                color = MaterialTheme.colorScheme.tertiary,
+                track = StreakTheme.colors.larchSoft,
+                size = 112.dp,
+            )
+            Spacer(Modifier.height(Space.s6 + Space.s2))
+            Text(milestone.label(), style = MaterialTheme.typography.displayMedium)
+            Spacer(Modifier.height(Space.s2 + Space.s1))
+            Text(
+                "Day ${milestone.dayNumber} of ${milestone.totalDays} · " +
+                    milestone.triggeredOnDate.format(MILESTONE_DATE_FORMAT),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.tertiary,
+            )
+            // "45 days behind you, 45 ahead." — left out for FINAL, where
+            // "0 ahead" says nothing (and a failed arc's days weren't all run).
+            if (milestone.kind != MilestoneKind.FINAL) {
+                Spacer(Modifier.height(Space.s4))
+                Text(
+                    "${dayCount(milestone.dayNumber)} behind you, " +
+                        "${milestone.totalDays - milestone.dayNumber} ahead.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        bottom = {
+            ReflectionField(
+                value = reflection,
+                onValueChange = { reflection = it },
+                label = "A line for later",
+                helper = "You'll see it again in your recap.",
+            )
+            Spacer(Modifier.height(Space.s6))
+            LargeButton(
+                text = "Continue",
+                onClick = { onAcknowledge(reflection.trim().ifBlank { null }) },
+                filled = true,
+            )
+        },
+    )
 }
 
-// Shown when two or more milestones are pending at once (docs/tasks/14) — one
-// card lists them oldest-first instead of a stack of full-screen cards. Copy
-// is neutral: "You've passed N milestones." stays true whether or not there
-// was an absence (two can go pending while the app was only briefly closed, or
-// never closed at all). The single optional reflection is saved on the latest
-// milestone (handled by acknowledge via reflectionTargetId). Scrolls because
-// four rows plus the field plus the keyboard can overflow a short screen.
+// Design 05 — two or more pending milestones collapse into one page
+// (docs/tasks/14), listed oldest-first. The one reflection is saved on the
+// latest milestone (reflectionTargetId), which the helper line names.
 @Composable
 private fun MilestoneSummaryCard(
     summary: PendingMilestoneUiState.Summary,
@@ -480,42 +518,94 @@ private fun MilestoneSummaryCard(
     modifier: Modifier = Modifier,
 ) {
     var reflection by remember(summary.ids) { mutableStateOf("") }
-    Column(
-        modifier = modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            "You've passed ${summary.rows.size} milestones.",
-            style = MaterialTheme.typography.headlineMedium,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(16.dp))
-        summary.rows.forEach { row ->
+    val latest = summary.rows.last()
+    AnchoredPage(
+        modifier = modifier,
+        top = {
+            Spacer(Modifier.height(Space.s6 + Space.s2))
             Text(
-                "${row.shortLabel()} — day ${row.dayNumber} of ${row.totalDays}, " +
-                    row.triggeredOnDate.format(MILESTONE_DATE_FORMAT),
-                style = MaterialTheme.typography.bodyLarge,
-                textAlign = TextAlign.Center,
+                "${summary.arcName} · Day ${summary.todayDayNumber} of ${latest.totalDays}",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.tertiary,
             )
-            Spacer(Modifier.height(8.dp))
-        }
-        Spacer(Modifier.height(24.dp))
-        OutlinedTextField(
-            value = reflection,
-            onValueChange = { reflection = it },
-            label = { Text("Reflection (optional)") },
-            modifier = Modifier.fillMaxWidth(),
+            Spacer(Modifier.height(Space.s2 + Space.s1))
+            Text("You've passed ${summary.rows.size} milestones", style = MaterialTheme.typography.displayMedium)
+            Spacer(Modifier.height(Space.s6 + Space.s2))
+            Column(verticalArrangement = Arrangement.spacedBy(Space.s2)) {
+                summary.rows.forEach { row ->
+                    val isLatest = row.id == latest.id
+                    StreakCardRow(
+                        border = if (isLatest) {
+                            BorderStroke(1.5.dp, MaterialTheme.colorScheme.tertiary)
+                        } else {
+                            BorderStroke(1.dp, StreakTheme.colors.line)
+                        },
+                    ) {
+                        ProgressPie(
+                            fraction = row.kind.fraction(),
+                            color = MaterialTheme.colorScheme.tertiary,
+                            track = StreakTheme.colors.larchSoft,
+                            size = 32.dp,
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                row.label(),
+                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                            )
+                            Text(
+                                "Day ${row.dayNumber} · ${row.triggeredOnDate.format(MILESTONE_DATE_FORMAT)}" +
+                                    if (isLatest) " · latest" else "",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        bottom = {
+            ReflectionField(
+                value = reflection,
+                onValueChange = { reflection = it },
+                label = "One line about how it's going",
+                helper = "Saved with the latest one, ${latest.label()}.",
+            )
+            Spacer(Modifier.height(Space.s6))
+            LargeButton(
+                text = "Continue",
+                onClick = { onAcknowledge(reflection.trim().ifBlank { null }) },
+                filled = true,
+            )
+        },
+    )
+}
+
+// A surface card laid out as one row — the milestone rows (05) and the "What
+// you'll do" rows (06).
+@Composable
+private fun StreakCardRow(
+    border: BorderStroke = BorderStroke(1.dp, StreakTheme.colors.line),
+    content: @Composable RowScope.() -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surface,
+        border = border,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = Space.s4, vertical = Space.s2 + Space.s1),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Space.s4),
+            content = content,
         )
-        Spacer(Modifier.height(24.dp))
-        Button(onClick = { onAcknowledge(reflection.trim().ifBlank { null }) }) { Text("Continue") }
     }
 }
 
 // FINAL fires on either completion or failure (R10) — arcCompleted picks
 // which of the two this actually is; it's only ever null for the other
 // kinds, which don't need the distinction.
-private fun PendingMilestoneUiState.Single.label(): String = when (kind) {
+private fun milestoneLabel(kind: MilestoneKind, arcCompleted: Boolean?): String = when (kind) {
     MilestoneKind.START -> "You're underway"
     MilestoneKind.P25 -> "A quarter of the way there"
     MilestoneKind.P50 -> "Halfway there"
@@ -523,19 +613,249 @@ private fun PendingMilestoneUiState.Single.label(): String = when (kind) {
     MilestoneKind.FINAL -> if (arcCompleted == true) "Arc complete" else "Arc ended"
 }
 
-// Short form for a summary row — the long sentences read as a list of one-liners
-// here. START never reaches a card (observePendingByArc excludes it); FINAL
-// splits the same way label() does.
-private fun PendingMilestoneUiState.Summary.Row.shortLabel(): String = when (kind) {
-    MilestoneKind.START -> "Underway"
-    MilestoneKind.P25 -> "A quarter"
-    MilestoneKind.P50 -> "Halfway"
-    MilestoneKind.P75 -> "Three quarters"
-    MilestoneKind.FINAL -> if (arcCompleted == true) "Arc complete" else "Arc ended"
+private fun PendingMilestoneUiState.Single.label(): String = milestoneLabel(kind, arcCompleted)
+
+// Design 05 lists rows with the same full sentences as the single card.
+private fun PendingMilestoneUiState.Summary.Row.label(): String = milestoneLabel(kind, arcCompleted)
+
+// "14 January" — the crossing date, read from triggered_on_date (docs/tasks/14).
+private val MILESTONE_DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMMM")
+
+// Design 07 — no active arc. The row of pies previews what an arc fills in;
+// the four steps are the create flow's order.
+@Composable
+private fun NoArcContent(onCreateArc: () -> Unit, modifier: Modifier = Modifier) {
+    AnchoredPage(
+        modifier = modifier,
+        top = {
+            Spacer(Modifier.height(Space.s6 + Space.s2))
+            Row(
+                modifier = Modifier.clearAndSetSemantics {},
+                horizontalArrangement = Arrangement.spacedBy(Space.s2 + Space.s1),
+            ) {
+                listOf(0f, 0.25f, 0.5f, 0.75f, 1f).forEach { fraction ->
+                    ProgressPie(fraction = fraction, color = MaterialTheme.colorScheme.primary, track = null, size = 36.dp)
+                }
+            }
+        },
+        bottom = {
+            Text("Start an arc", style = MaterialTheme.typography.displayMedium)
+            Spacer(Modifier.height(Space.s4))
+            Text(
+                "An arc is a stretch of days with a start, an end, and a few things you'll do each day. " +
+                    "When it ends, you'll see how it went.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(Space.s6 + Space.s2))
+            StreakCard {
+                Column(verticalArrangement = Arrangement.spacedBy(Space.s2 + Space.s1)) {
+                    listOf(
+                        "Name it and pick the dates.",
+                        "Choose what you'll do, and on which days.",
+                        "Set how strict it is.",
+                        "Write down why you're doing it.",
+                    ).forEachIndexed { index, step ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(Space.s2 + Space.s1)) {
+                            Text(
+                                "${index + 1}",
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.tertiary,
+                                modifier = Modifier.width(Space.s4).alignByBaseline(),
+                            )
+                            Text(step, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.alignByBaseline())
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(Space.s6 + Space.s2))
+            LargeButton(text = "Start an arc", onClick = onCreateArc, filled = true)
+        },
+    )
 }
 
-// "10 Sep" — the crossing date, read from triggered_on_date (docs/tasks/14).
-private val MILESTONE_DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM")
+// "Monday 6 April" / "Saturday 28 February"
+private val LONG_DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE d MMMM")
+
+// Design 06 — the arc exists but hasn't started. Countdown, the user's own
+// "why" in their voice, and what they signed up for.
+@Composable
+private fun NotStartedContent(state: TodayUiState.NotStarted, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(Space.s6),
+        verticalArrangement = Arrangement.spacedBy(Space.s4 + Space.s1),
+    ) {
+        Column {
+            Text(state.arcName, style = MaterialTheme.typography.labelLarge)
+            Text(
+                "Starts ${state.startDate.format(LONG_DATE_FORMAT)} · ${dayCount(state.totalDays)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Column(modifier = Modifier.padding(top = Space.s6)) {
+            Text(
+                "${state.daysToGo}",
+                style = MaterialTheme.typography.displayMedium,
+                color = MaterialTheme.colorScheme.tertiary,
+            )
+            Spacer(Modifier.height(Space.s2))
+            Text(
+                if (state.daysToGo == 1) "day to go" else "days to go",
+                style = MaterialTheme.typography.headlineMedium,
+            )
+            Spacer(Modifier.height(Space.s2))
+            Text(
+                "Nothing to check in yet.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        // Only when the user wrote one — the create flow allows skipping it.
+        if (state.intention != null) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, StreakTheme.colors.line),
+            ) {
+                Column(
+                    modifier = Modifier.padding(Space.s4 + Space.s1),
+                    verticalArrangement = Arrangement.spacedBy(Space.s2),
+                ) {
+                    Text(
+                        "You wrote",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(state.intention, style = StreakTheme.type.voice)
+                }
+            }
+        }
+        if (state.commitments.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(Space.s2)) {
+                Text("What you'll do", style = MaterialTheme.typography.titleLarge)
+                state.commitments.forEach { commitment ->
+                    StreakCardRow {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(Space.s2),
+                        ) {
+                            Text(
+                                commitment.name,
+                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                            )
+                            if (!commitment.isRequired) BonusChip()
+                        }
+                        if (commitment.scheduleText != null) {
+                            Text(
+                                commitment.scheduleText,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// "Ninety" — the arc's length spelled out for design 08's "Ninety days,
+// done." ICU's English spell-out (MessageFormat's "spellout" argument type,
+// part of the platform since API 24 — no new dependency), first letter
+// capitalised.
+internal fun spellOut(n: Int): String =
+    MessageFormat("{0,spellout}", Locale.ENGLISH)
+        .format(arrayOf<Any>(n))
+        .replaceFirstChar { it.uppercase() }
+
+// Design 08 — the arc is over (completed or failed). The recap is the main
+// thing to do from here (docs/tasks/15). Remix only makes sense for a failed
+// arc, so it only shows there.
+@Composable
+private fun EndedContent(
+    state: TodayUiState.Ended,
+    onViewRecap: (sourceArcId: String) -> Unit,
+    onCreateArc: () -> Unit,
+    onRemix: (sourceArcId: String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    AnchoredPage(
+        modifier = modifier,
+        top = {
+            Text(state.arcName, style = MaterialTheme.typography.labelLarge)
+            Text(
+                "Ended ${state.endedOn.format(LONG_DATE_FORMAT)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(Space.s10 + Space.s2))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    if (state.completed) {
+                        Text("${spellOut(state.totalDays)} days, done.", style = MaterialTheme.typography.headlineMedium)
+                    }
+                    // Shown once the recap's counts have loaded.
+                    if (state.daysShowedUp != null && state.daysCounted != null) {
+                        Text("You showed up", style = MaterialTheme.typography.headlineMedium)
+                        Spacer(Modifier.height(Space.s2 + Space.s1))
+                        Text(
+                            "${state.daysShowedUp}",
+                            style = MaterialTheme.typography.displayMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Spacer(Modifier.height(Space.s2))
+                        Text("of ${dayCount(state.daysCounted)}", style = MaterialTheme.typography.titleLarge)
+                    }
+                }
+                Spacer(Modifier.width(Space.s4))
+                SeasonGrid(arcName = state.arcName, season = state.season)
+            }
+        },
+        bottom = {
+            Text(
+                "Your recap is ready — the whole season, and what you wrote along the way.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(Space.s4 + Space.s1))
+            Column(verticalArrangement = Arrangement.spacedBy(Space.s2 + Space.s1)) {
+                LargeButton(text = "See your recap", onClick = { onViewRecap(state.sourceArcId) }, filled = true)
+                LargeButton(text = "Start something new", onClick = onCreateArc, filled = false)
+                if (!state.completed) {
+                    LargeButton(text = "Remix this arc", onClick = { onRemix(state.sourceArcId) }, filled = false)
+                }
+            }
+        },
+    )
+}
+
+// Every day of the arc as a 12 dp disc, seven to a row from the start date
+// (design 08). One TalkBack item for the whole grid.
+@Composable
+private fun SeasonGrid(arcName: String, season: List<DayState>) {
+    Column(
+        modifier = Modifier.clearAndSetSemantics {
+            contentDescription = "All ${dayCount(season.size)} of $arcName, one row per week."
+        },
+        verticalArrangement = Arrangement.spacedBy(Space.s1),
+    ) {
+        season.chunked(7).forEach { week ->
+            Row(horizontalArrangement = Arrangement.spacedBy(Space.s1)) {
+                week.forEach { state -> DayDisc(state = state, isToday = false, size = 12.dp) }
+            }
+        }
+    }
+}
 
 // Design 01's Wednesday: Gym done, Water part way, two bonus items, a long
 // walk not scheduled today, one rest token left.
@@ -647,4 +967,112 @@ private fun TodayCompletePreview() {
 @Composable
 private fun TodayRestingPreview() {
     TodayPreview(fakeLoadedState(DayState.REST))
+}
+
+@Composable
+private fun StatePreview(state: TodayUiState, pendingMilestone: PendingMilestoneUiState? = null) {
+    StreakTheme {
+        Surface(color = MaterialTheme.colorScheme.background) {
+            TodayScreen(
+                state = state,
+                pendingMilestone = pendingMilestone,
+                onAcknowledgeMilestone = {},
+                onToggleBinary = { _, _ -> },
+                onCounterChange = { _, _ -> },
+                onDurationChange = { _, _ -> },
+                onLogChange = { _, _ -> },
+                onUndo = {},
+                onSetRestDay = {},
+                onCreateArc = {},
+                onRemix = {},
+                onViewRecap = {},
+            )
+        }
+    }
+}
+
+// Design 04.
+@PreviewLightDark
+@Composable
+private fun MilestoneSinglePreview() {
+    StatePreview(
+        state = fakeLoadedState(),
+        pendingMilestone = PendingMilestoneUiState.Single(
+            id = "m50", kind = MilestoneKind.P50, dayNumber = 45, totalDays = 90,
+            triggeredOnDate = LocalDate.of(2026, 1, 14),
+        ),
+    )
+}
+
+// Design 05.
+@PreviewLightDark
+@Composable
+private fun MilestoneSummaryPreview() {
+    StatePreview(
+        state = fakeLoadedState(),
+        pendingMilestone = PendingMilestoneUiState.Summary(
+            rows = listOf(
+                PendingMilestoneUiState.Summary.Row("m25", MilestoneKind.P25, 23, 90, LocalDate.of(2025, 12, 23)),
+                PendingMilestoneUiState.Summary.Row("m50", MilestoneKind.P50, 45, 90, LocalDate.of(2026, 1, 14)),
+                PendingMilestoneUiState.Summary.Row("m75", MilestoneKind.P75, 68, 90, LocalDate.of(2026, 2, 6)),
+            ),
+            arcName = "Winter Arc",
+            todayDayNumber = 70,
+        ),
+    )
+}
+
+// Design 06.
+@PreviewLightDark
+@Composable
+private fun NotStartedPreview() {
+    StatePreview(
+        TodayUiState.NotStarted(
+            arcName = "Spring Sprint",
+            startDate = LocalDate.of(2026, 4, 6),
+            totalDays = 30,
+            daysToGo = 3,
+            intention = "Get my mornings back.",
+            commitments = listOf(
+                PlannedCommitmentUiState("1", "Run 5 km", isRequired = true, scheduleText = "Mon, Wed, Fri"),
+                PlannedCommitmentUiState("2", "Up by 6:30", isRequired = true, scheduleText = "Every day"),
+                PlannedCommitmentUiState("3", "Journal", isRequired = false, scheduleText = "Every day"),
+            ),
+        ),
+    )
+}
+
+// Design 07.
+@PreviewLightDark
+@Composable
+private fun NoArcPreview() {
+    StatePreview(TodayUiState.NoActiveArc)
+}
+
+// Design 08: a 90-day arc, mostly complete, with some partial, missed and rest days.
+@PreviewLightDark
+@Composable
+private fun EndedPreview() {
+    val season = "CCCCCCRCCPCCCRCCCMCCCCMCRMCPCCCMCCRCCCPCCCCMCCCCCCCCRCCCCCCCCCCCCCCPCCCMCCCCRCCCMCCCCCPCCC"
+        .map {
+            when (it) {
+                'P' -> DayState.PARTIAL
+                'M' -> DayState.MISSED
+                'R' -> DayState.REST
+                else -> DayState.COMPLETE
+            }
+        }
+    StatePreview(
+        TodayUiState.Ended(
+            arcName = "Winter Arc",
+            totalDays = 90,
+            completed = true,
+            failedOnDate = null,
+            sourceArcId = "arc",
+            endedOn = LocalDate.of(2026, 2, 28),
+            season = season,
+            daysShowedUp = 72,
+            daysCounted = 84,
+        ),
+    )
 }
