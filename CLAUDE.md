@@ -153,5 +153,22 @@ Static font cuts live in `res/font/` (`ss-title` uses 600, not tokens' 650).
 theme — no screen layout — so screens built against the template now show the
 new palette/fonts but still need their own redesign tasks.
 
+Rest days (`docs/tasks/17-rest-day.md`) are done. R5/R6/R11 were amended: rest
+is checked before pending, so flagging an unfinished today takes the week's
+token immediately and finishing everything anyway returns it. Tokens are never
+applied automatically. In the engine, `applyRestTokens` treats a provisional
+`PENDING` day as token-eligible, and `isoWeekKey` is public so `:app` can read
+this week's `restTokensRemaining`. Today shows a rest-day row
+(`TodayUiState.Loaded.restDayRow`: OFFER / RESTING / none) driving
+`TodayViewModel.setRestDay` → `ArcRepository.setRestTokenUsed`. `DayDao.upsert`
+now revives a soft-deleted day row instead of `DO NOTHING`. Open finding (R7,
+not fixed): repository writes don't check sealing, and with `backfill_days = 0`
+a Today screen left open across the day boundary can write to a sealed date.
+
+The Today redesign (`docs/tasks/18-today-redesign.md`, designs in
+`docs/design/today/`) is in progress. Reusable, stateless pieces live in
+`ui/components/` (`DayDisc`, `WeekStrip`, `StreakPill`, `BonusChip`, the
+commitment cards, `RestDayCard`).
+
 Remaining Compose work is whatever comes next (see `docs/tasks/` for the next
 brief).

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Milestone — halfway there</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&amp;family=Literata:ital,opsz,wght@0,7..72,400;1,7..72,400&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#74C597}a:hover{color:#E6EDE7}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; padding: 56px 24px 40px 24px; background: {{c.frost}}; color: {{c.ink}}; font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif">
+  <svg width="112" height="112" viewBox="0 0 112 112" aria-hidden="true"><circle cx="56" cy="56" r="56" fill="{{c.larchSoft}}"></circle><path d="M56 56 L56 0 A56 56 0 0 1 56 112 Z" fill="{{c.larch}}"></path></svg>
+
+  <div style="font-size: 56px; line-height: 56px; font-weight: 700; letter-spacing: -0.03em; margin-top: 32px">Halfway there</div>
+  <div style="font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.02em; color: {{c.larch}}; margin-top: 12px">Day 45 of 90 · 14 January</div>
+  <div style="font-size: 16px; line-height: 24px; color: {{c.muted}}; margin-top: 16px">45 days behind you, 45 ahead.</div>
+
+  <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 8px">
+    <label for="reflection" style="font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.02em">A line for later <span style="font-weight: 400; color: {{c.muted}}">· optional</span></label>
+    <textarea id="reflection" rows="3" placeholder="How is it going?" style="box-sizing: border-box; width: 100%; padding: 14px; border-radius: 6px; border: 1.5px solid {{c.lineStrong}}; background: {{c.sunken}}; color: {{c.ink}}; font-family: 'Literata', ui-serif, Georgia, serif; font-style: italic; font-size: 18px; line-height: 28px; resize: none"></textarea>
+    <div style="font-size: 12px; line-height: 16px; color: {{c.muted}}">You'll see it again in your recap.</div>
+    <button style="height: 56px; margin-top: 24px; border: 0; border-radius: 999px; background: {{c.ever}}; color: {{c.onEver}}; font-family: inherit; font-size: 16px; line-height: 24px; font-weight: 600; cursor: pointer">Continue</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":true},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const P = {
+      light: { frost: '#F3F5F0', surface: '#FFFFFF', sunken: '#E7ECE4', line: '#CBD3C6', lineStrong: '#7A877E', ink: '#13201A', muted: '#526158', ever: '#1E5B3F', everSoft: '#D8E9DE', onEver: '#FFFFFF', larch: '#8F5C08', larchSoft: '#F6E7C8', missed: '#A2482D', rest: '#3F6683' },
+      dark:  { frost: '#0F1612', surface: '#17201B', sunken: '#1F2A24', line: '#34433A', lineStrong: '#6E7E74', ink: '#E6EDE7', muted: '#9DAAA1', ever: '#74C597', everSoft: '#1C3628', onEver: '#0F1612', larch: '#E6AA4E', larchSoft: '#3B2C13', missed: '#E39176', rest: '#93B7D0' }
+    };
+    const c = (this.props.dark ?? true) ? P.dark : P.light;
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

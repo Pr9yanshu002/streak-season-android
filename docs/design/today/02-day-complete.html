@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Today — day complete</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&amp;family=Literata:ital,opsz,wght@0,7..72,400;1,7..72,400&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#1E5B3F}a:hover{color:#13201A}
+</style>
+</helmet>
+<div style="width: 390px; height: 1000px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px; padding: 24px 24px 40px 24px; background: {{c.frost}}; color: {{c.ink}}; font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif">
+
+  <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px">
+    <div>
+      <div style="font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.02em">Winter Arc</div>
+      <div style="font-size: 12px; line-height: 16px; color: {{c.muted}}">Wednesday 21 January</div>
+    </div>
+    <div style="font-size: 13px; line-height: 18px; font-weight: 600; padding: 6px 12px; border-radius: 999px; background: {{c.everSoft}}; color: {{c.ever}}">8-day streak</div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 16px; padding: 20px; border-radius: 16px; background: {{c.ever}}; color: {{c.onEver}}">
+    <div style="display: flex; align-items: center; gap: 14px">
+      <div style="flex: none; width: 48px; height: 48px; border-radius: 999px; background: {{c.onEver}}; color: {{c.ever}}; display: flex; align-items: center; justify-content: center">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+      </div>
+      <div>
+        <div style="font-size: 28px; line-height: 34px; font-weight: 650; letter-spacing: -0.01em">Day 52 done</div>
+        <div style="font-size: 13px; line-height: 18px">Everything required, 8 days in a row.</div>
+      </div>
+    </div>
+    <div role="img" aria-label="This week: Monday, Tuesday and today complete; Thursday to Sunday still to come." style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); justify-items: center">
+      <sc-for list="{{week}}" as="d" hint-placeholder-count="7">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px">
+          <div style="width: 28px; height: 28px; border-radius: 999px; box-sizing: border-box; {{d.style}}"></div>
+          <div style="font-size: 12px; line-height: 16px; {{d.labelStyle}}">{{d.day}}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="display: flex; align-items: baseline; justify-content: space-between">
+    <div style="font-size: 20px; line-height: 26px; font-weight: 600">Today</div>
+    <div style="font-size: 13px; line-height: 18px; font-weight: 600; color: {{c.ever}}">2 of 2 required done</div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 12px">
+    <div style="display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 16px; background: {{c.everSoft}}">
+      <button aria-label="Gym, done" aria-pressed="true" style="flex: none; width: 44px; height: 44px; border-radius: 999px; border: 0; padding: 0; background: {{c.ever}}; color: {{c.onEver}}; display: flex; align-items: center; justify-content: center; cursor: pointer">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+      </button>
+      <div style="flex: 1">
+        <div style="font-size: 16px; line-height: 24px; font-weight: 600">Gym</div>
+        <div style="font-size: 12px; line-height: 16px; color: {{c.ever}}">Done</div>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 16px; background: {{c.everSoft}}">
+      <div style="flex: none; width: 44px; height: 44px; border-radius: 999px; background: {{c.ever}}; color: {{c.onEver}}; display: flex; align-items: center; justify-content: center">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+      </div>
+      <div style="flex: 1">
+        <div style="font-size: 16px; line-height: 24px; font-weight: 600">Water</div>
+        <div style="font-size: 12px; line-height: 16px; color: {{c.ever}}">3,000 of 3,000 ml · done</div>
+      </div>
+      <button aria-label="Remove 250 ml of water" style="flex: none; width: 44px; height: 44px; border-radius: 999px; background: transparent; border: 1.5px solid {{c.lineStrong}}; color: {{c.ink}}; padding: 0; display: flex; align-items: center; justify-content: center; cursor: pointer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 12h12"></path></svg>
+      </button>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.line}}">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <div style="flex: 1">
+          <div style="display: flex; align-items: center; gap: 8px">
+            <div style="font-size: 16px; line-height: 24px; font-weight: 600">Reading</div>
+            <div style="font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.02em; padding: 2px 8px; border-radius: 999px; background: {{c.larchSoft}}; color: {{c.larch}}">Bonus</div>
+          </div>
+          <div style="font-size: 12px; line-height: 16px; color: {{c.muted}}"><span style="font-weight: 600; color: {{c.ink}}">20</span> of 30 min · doesn't affect your day</div>
+        </div>
+        <button aria-label="Remove 5 minutes of reading" style="flex: none; width: 44px; height: 44px; border-radius: 999px; background: transparent; border: 1.5px solid {{c.lineStrong}}; color: {{c.ink}}; padding: 0; display: flex; align-items: center; justify-content: center; cursor: pointer">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 12h12"></path></svg>
+        </button>
+        <button aria-label="Add 5 minutes of reading" style="flex: none; width: 44px; height: 44px; border-radius: 999px; background: {{c.ever}}; border: 0; color: {{c.onEver}}; padding: 0; display: flex; align-items: center; justify-content: center; cursor: pointer">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 12h12M12 6v12"></path></svg>
+        </button>
+      </div>
+      <div style="height: 6px; border-radius: 999px; background: {{c.sunken}}; overflow: hidden">
+        <div style="width: 67%; height: 6px; border-radius: 999px; background: {{c.ever}}"></div>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 12px; padding: 16px; border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.line}}">
+      <div style="flex: 1">
+        <div style="display: flex; align-items: center; gap: 8px">
+          <div style="font-size: 16px; line-height: 24px; font-weight: 600">Weight</div>
+          <div style="font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.02em; padding: 2px 8px; border-radius: 999px; background: {{c.larchSoft}}; color: {{c.larch}}">Bonus</div>
+        </div>
+        <div style="font-size: 12px; line-height: 16px; color: {{c.muted}}">Logged today</div>
+      </div>
+      <div style="font-size: 20px; line-height: 26px; font-weight: 600">75.6 kg</div>
+      <button aria-label="Edit today's weight" style="flex: none; width: 44px; height: 44px; border-radius: 999px; background: transparent; border: 0; color: {{c.muted}}; padding: 0; display: flex; align-items: center; justify-content: center; cursor: pointer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4z"></path></svg>
+      </button>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 16px; border: 1px dashed {{c.line}}">
+      <div style="flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center">
+        <div style="width: 22px; height: 22px; border-radius: 999px; background: {{c.sunken}}"></div>
+      </div>
+      <div style="flex: 1">
+        <div style="font-size: 16px; line-height: 24px; font-weight: 600; color: {{c.muted}}">Long walk</div>
+        <div style="font-size: 12px; line-height: 16px; color: {{c.muted}}">Not today · Saturdays and Sundays</div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":390,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const P = {
+      light: { frost: '#F3F5F0', surface: '#FFFFFF', sunken: '#E7ECE4', line: '#CBD3C6', lineStrong: '#7A877E', ink: '#13201A', muted: '#526158', ever: '#1E5B3F', everSoft: '#D8E9DE', onEver: '#FFFFFF', larch: '#8F5C08', larchSoft: '#F6E7C8', missed: '#A2482D', rest: '#3F6683' },
+      dark:  { frost: '#0F1612', surface: '#17201B', sunken: '#1F2A24', line: '#34433A', lineStrong: '#6E7E74', ink: '#E6EDE7', muted: '#9DAAA1', ever: '#74C597', everSoft: '#1C3628', onEver: '#0F1612', larch: '#E6AA4E', larchSoft: '#3B2C13', missed: '#E39176', rest: '#93B7D0' }
+    };
+    const c = (this.props.dark ?? false) ? P.dark : P.light;
+    const names = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    const states = ['C', 'C', 'T', 'F', 'F', 'F', 'F'];
+    const week = states.map((s, i) => ({
+      day: names[i],
+      style: s === 'F'
+        ? 'background: transparent; box-shadow: inset 0 0 0 1.5px ' + c.onEver + '; opacity: 0.45'
+        : 'background: ' + c.onEver + (s === 'T' ? '; box-shadow: 0 0 0 3px ' + c.ever + ', 0 0 0 5px ' + c.onEver : ''),
+      labelStyle: s === 'T' ? 'font-weight: 700' : 'opacity: 0.85'
+    }));
+    return { c, week };
+  }
+}
+</script>
+</body>
+</html>
