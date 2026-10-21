@@ -3,6 +3,7 @@ package dev.priyanshu.arc.ui.today
 import dev.priyanshu.arc.domain.model.CommitmentType
 import dev.priyanshu.arc.domain.model.DayState
 import dev.priyanshu.arc.domain.model.MilestoneKind
+import dev.priyanshu.arc.domain.model.Strictness
 import java.time.LocalDate
 
 sealed interface TodayUiState {
@@ -33,8 +34,27 @@ sealed interface TodayUiState {
         val today: LocalDate,
         val todayState: DayState,
         val commitments: List<CommitmentUiState>,
-    ) : TodayUiState
+        val strictness: Strictness,
+        // Resolution.restTokensRemaining for today's ISO week (R6), read off
+        // the engine by its own week key — never counted here.
+        val restTokensLeftThisWeek: Int,
+    ) : TodayUiState {
+        // docs/tasks/17 — which rest-day row to show, or null for none. Shown
+        // only on a standard arc (R6: strict and chill have no tokens), never
+        // on a complete day (the flag would be ignored), and only when today
+        // is already rest or there is a token left to take.
+        val restDayRow: RestDayRow?
+            get() = when {
+                strictness != Strictness.STANDARD -> null
+                todayState == DayState.COMPLETE -> null
+                todayState == DayState.REST -> RestDayRow.RESTING
+                restTokensLeftThisWeek > 0 -> RestDayRow.OFFER
+                else -> null
+            }
+    }
 }
+
+enum class RestDayRow { OFFER, RESTING }
 
 data class CommitmentUiState(
     val id: String,

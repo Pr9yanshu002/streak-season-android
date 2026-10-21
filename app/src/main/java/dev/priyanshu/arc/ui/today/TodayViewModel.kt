@@ -10,6 +10,7 @@ import dev.priyanshu.arc.domain.model.ArcStatus
 import dev.priyanshu.arc.domain.model.CommitmentStatus
 import dev.priyanshu.arc.domain.model.DayState
 import dev.priyanshu.arc.domain.model.MilestoneKind
+import dev.priyanshu.arc.domain.rules.isoWeekKey
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.Job
@@ -135,6 +136,15 @@ class TodayViewModel(
         viewModelScope.launch { repository.undoEntry(id, today, commitmentId) }
     }
 
+    // docs/tasks/17 — flags or unflags today as a rest day. Whether the flag
+    // actually turns today into rest (R5/R6) is the engine's call; the new
+    // state arrives back through observeToday.
+    fun setRestDay(resting: Boolean) {
+        val id = arcId ?: return
+        val today = (state.value as? TodayUiState.Loaded)?.today ?: return
+        viewModelScope.launch { repository.setRestTokenUsed(id, today, resting) }
+    }
+
     private fun writeEntry(commitmentId: String, value: Double) {
         val id = arcId ?: return
         val today = (state.value as? TodayUiState.Loaded)?.today ?: return
@@ -189,6 +199,10 @@ private fun TodaySnapshot.toUiState(): TodayUiState {
         today = today,
         todayState = resolution.dayStates[today] ?: DayState.PENDING,
         commitments = commitmentStates,
+        strictness = arc.strictness,
+        // R6 — a lookup by the engine's own week key, not a count. Every week
+        // the arc's range touches has an entry, so ?: 0 is only a fallback.
+        restTokensLeftThisWeek = resolution.restTokensRemaining[isoWeekKey(today)] ?: 0,
     )
 }
 

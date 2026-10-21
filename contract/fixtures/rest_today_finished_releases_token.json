@@ -1,0 +1,41 @@
+{
+  "id": "rest_today_finished_releases_token",
+  "rules": ["R5", "R6"],
+  "description": "Today is flagged as a rest day but everything gets done anyway. Complete is checked before rest, so the day is complete, the flag is ignored, and the week's token is returned.",
+  "now": "2026-01-14T20:00:00",
+  "arc": {
+    "id": "arc-1",
+    "name": "Standard Arc",
+    "start_date": "2026-01-12",
+    "end_date": "2026-02-12",
+    "status": "active",
+    "strictness": "standard",
+    "rest_tokens_per_week": 1,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+  "commitments": [
+    {
+      "id": "c-gym",
+      "name": "Gym",
+      "type": "binary",
+      "is_required": true,
+      "schedule_type": "daily",
+      "active_from": "2026-01-12"
+    }
+  ],
+  "days": [
+    { "date": "2026-01-12", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-13", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-14", "entries": { "c-gym": 1 }, "rest_token_used": true }
+  ],
+  "expect": {
+    "day_states": {
+      "2026-01-12": "complete",
+      "2026-01-13": "complete",
+      "2026-01-14": "complete"
+    },
+    "rest_tokens_remaining": { "2026-W03": 1 },
+    "current_streak": 3
+  }
+}

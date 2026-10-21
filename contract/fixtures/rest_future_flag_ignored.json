@@ -1,0 +1,39 @@
+{
+  "id": "rest_future_flag_ignored",
+  "rules": ["R5", "R6"],
+  "description": "A rest flag on a future date is ignored: the date stays future and the week's token is not consumed.",
+  "now": "2026-01-14T10:00:00",
+  "arc": {
+    "id": "arc-1",
+    "name": "Standard Arc",
+    "start_date": "2026-01-12",
+    "end_date": "2026-02-12",
+    "status": "active",
+    "strictness": "standard",
+    "rest_tokens_per_week": 1,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+  "commitments": [
+    {
+      "id": "c-gym",
+      "name": "Gym",
+      "type": "binary",
+      "is_required": true,
+      "schedule_type": "daily",
+      "active_from": "2026-01-12"
+    }
+  ],
+  "days": [
+    { "date": "2026-01-12", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-13", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-16", "entries": {}, "rest_token_used": true }
+  ],
+  "expect": {
+    "day_states": {
+      "2026-01-14": "pending",
+      "2026-01-16": "future"
+    },
+    "rest_tokens_remaining": { "2026-W03": 1 }
+  }
+}

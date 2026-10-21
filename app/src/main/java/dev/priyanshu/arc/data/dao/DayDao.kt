@@ -13,11 +13,20 @@ interface DayDao {
     // entries had. A single atomic statement removes the race window
     // entirely: if the row already exists, this is a no-op (matches the old
     // getOrCreateDay's "return the existing row untouched" behavior).
+    //
+    // A soft-deleted day still occupies the (arc_id, date) unique index
+    // (CLAUDE.md), so the conflict branch revives it: deleted_at = NULL and
+    // updated_at bumped. The WHERE limits that to dead rows, so a live row
+    // is still left untouched. Without this, ensureDay's follow-up SELECT
+    // (which filters deleted_at IS NULL) would find nothing and crash.
     @Query(
         """
         INSERT INTO days (id, arc_id, date, rest_token_used, created_at, updated_at)
         VALUES (:id, :arcId, :date, 0, :now, :now)
-        ON CONFLICT(arc_id, date) DO NOTHING
+        ON CONFLICT(arc_id, date) DO UPDATE SET
+            deleted_at = NULL,
+            updated_at = excluded.updated_at
+        WHERE days.deleted_at IS NOT NULL
         """
     )
     suspend fun upsert(id: String, arcId: String, date: String, now: Long)

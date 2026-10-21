@@ -228,11 +228,11 @@ internal fun applyRestTokens(
         consumedByWeek.putIfAbsent(weekKey, 0)
 
         val provisional = provisionalStates.getValue(date)
-        val wouldOtherwiseFail = provisional == DayState.PARTIAL || provisional == DayState.MISSED
+        val canUseToken = provisional == DayState.PARTIAL || provisional == DayState.MISSED || provisional == DayState.PENDING
         val restTokenUsed = daysByDate[date]?.restTokenUsed ?: false
         val consumedSoFarThisWeek = consumedByWeek.getValue(weekKey)
 
-        if (restTokenUsed && wouldOtherwiseFail && consumedSoFarThisWeek < allowance) {
+        if (restTokenUsed && canUseToken && consumedSoFarThisWeek < allowance) {
             finalStates[date] = DayState.REST
             consumedByWeek[weekKey] = consumedSoFarThisWeek + 1
         } else {
@@ -260,7 +260,7 @@ internal fun applyRestTokens(
  * (`Calendar(identifier: .iso8601)`), not whatever the current locale's
  * calendar happens to compute — see docs/notes.md.
  */
-internal fun isoWeekKey(date: LocalDate): String {
+fun isoWeekKey(date: LocalDate): String {
     val weekBasedYear = date.get(IsoFields.WEEK_BASED_YEAR)
     val week = date.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)
     return "%04d-W%02d".format(weekBasedYear, week)

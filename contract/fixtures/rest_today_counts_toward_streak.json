@@ -1,0 +1,42 @@
+{
+  "id": "rest_today_counts_toward_streak",
+  "rules": ["R5", "R6", "R11"],
+  "description": "Today is flagged as a rest day and nothing is done yet. Rest is checked before pending, so today is rest straight away, the token is consumed, and today counts toward the current streak.",
+  "now": "2026-01-14T20:00:00",
+  "arc": {
+    "id": "arc-1",
+    "name": "Streak Arc",
+    "start_date": "2026-01-12",
+    "end_date": "2026-02-12",
+    "status": "active",
+    "strictness": "standard",
+    "rest_tokens_per_week": 1,
+    "backfill_days": 2,
+    "day_boundary_hour": 4
+  },
+  "commitments": [
+    {
+      "id": "c-gym",
+      "name": "Gym",
+      "type": "binary",
+      "is_required": true,
+      "schedule_type": "daily",
+      "active_from": "2026-01-12"
+    }
+  ],
+  "days": [
+    { "date": "2026-01-12", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-13", "entries": { "c-gym": 1 } },
+    { "date": "2026-01-14", "entries": {}, "rest_token_used": true }
+  ],
+  "expect": {
+    "day_states": {
+      "2026-01-12": "complete",
+      "2026-01-13": "complete",
+      "2026-01-14": "rest"
+    },
+    "current_streak": 3,
+    "best_streak": 3,
+    "rest_tokens_remaining": { "2026-W03": 0 }
+  }
+}

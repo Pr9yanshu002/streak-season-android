@@ -107,11 +107,16 @@ satisfied := those with a satisfying entry (R4)
 
 if required is empty:               -> complete        (see note)
 if satisfied == required:           -> complete
-if D == today:                      -> pending
 if day.rest_token_used == 1 and rest token is valid (R6): -> rest
+if D == today:                      -> pending
 if satisfied is empty:              -> missed
 otherwise:                          -> partial
 ```
+
+Rest is checked before pending so a user who marks today as a rest day
+sees it immediately, not the next morning. Complete is still checked
+first, so finishing everything on a flagged day makes the day complete
+and the flag is ignored.
 
 **Note on the empty case:** a date with no required commitments scheduled — for
 example a weekdays-only arc on a Sunday — resolves to `complete`. It cannot
@@ -134,10 +139,15 @@ In `strict` and `chill`, `rest_tokens_per_week` is treated as 0 and any stored
 
 **Allowance:** `arcs.rest_tokens_per_week` per ISO week (Monday–Sunday).
 
-**Consumption:** the count of days in that ISO week where
-`rest_token_used = 1` **and** the day would otherwise resolve to `partial` or
-`missed`. A token flagged on a day that is already `complete` is ignored and
-not consumed.
+**Consumption:** a token is consumed on a day that has `rest_token_used = 1`
+and would otherwise resolve to `partial`, `missed` or `pending`. A flag on a
+`complete` day is ignored and does not consume a token. A flag on a `future`
+day is ignored and does not consume a token.
+
+Marking today as a rest day takes the token immediately; finishing
+everything that day anyway returns it. Tokens are never applied
+automatically: an unflagged `missed` or `partial` day stays `missed` or
+`partial` even if the week has tokens left.
 
 **Remaining:** `allowance - consumed`, floored at 0.
 
@@ -245,6 +255,10 @@ return streak
 
 A `pending` today is skipped rather than counted or breaking the run — you
 haven't failed today yet.
+
+A flagged, unfinished today with a valid token resolves to `rest`, not
+`pending` (R5), so it is counted in the current streak like any other rest
+day. This is a consequence of the R5 ladder, not a separate rule.
 
 **Best streak:** the longest run of consecutive dates in
 `elapsedDates(arc, today)` whose state is in `{complete, rest}`, ignoring a
