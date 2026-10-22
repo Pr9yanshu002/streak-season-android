@@ -7,10 +7,14 @@ import dev.priyanshu.arc.data.Clock
 import dev.priyanshu.arc.data.PendingMilestone
 import dev.priyanshu.arc.data.TodaySnapshot
 import dev.priyanshu.arc.domain.model.ArcStatus
+import dev.priyanshu.arc.domain.model.Commitment
 import dev.priyanshu.arc.domain.model.CommitmentStatus
 import dev.priyanshu.arc.domain.model.DayState
 import dev.priyanshu.arc.domain.model.MilestoneKind
+import dev.priyanshu.arc.domain.model.ScheduleType
 import dev.priyanshu.arc.domain.rules.isoWeekKey
+import dev.priyanshu.arc.ui.components.WeekStripDay
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.Job
@@ -78,11 +82,13 @@ class TodayViewModel(
                 repository.observePendingMilestones(id),
             ) { snapshot, pending -> snapshot to pending }
                 .onEach { (snapshot, pending) ->
-                    _state.value = snapshot.toUiState()
+                    _state.value = snapshot.toUiState().withEndedStats(id)
                     _pendingMilestone.value = pending.toPendingUiState(
                         arcStartDate = snapshot.arc.startDate,
                         totalDays = snapshot.resolution.totalDays,
                         arcStatus = snapshot.resolution.arcStatus,
+                        arcName = snapshot.arc.name,
+                        todayDayNumber = snapshot.resolution.dayNumber,
                     )
                 }
                 .launchIn(this)
@@ -98,6 +104,23 @@ class TodayViewModel(
     // still collecting observeToday(arcId), which throws the moment the old
     // arc disappears out from under it — a crash on a screen that isn't
     // even visible.
+    // Design 08's "You showed up X of Y days" is the recap's complete_days /
+    // counted_days (R19). Those come from recap(), which needs every day's
+    // entries — more than TodaySnapshot carries — so they're read once from
+    // getRecapScreenData, the recap screen's own loader, and cached for this
+    // arc. Only Ended needs them; every other state passes through untouched.
+    private var endedStats: Pair<String, Pair<Int, Int>>? = null
+
+    private suspend fun TodayUiState.withEndedStats(arcId: String): TodayUiState {
+        if (this !is TodayUiState.Ended) return this
+        val stats = endedStats?.takeIf { it.first == arcId }?.second
+            ?: repository.getRecapScreenData(arcId)?.recap
+                ?.let { it.completeDays to it.countedDays }
+                ?.also { endedStats = arcId to it }
+            ?: return this
+        return copy(daysShowedUp = stats.first, daysCounted = stats.second)
+    }
+
     fun stopObserving() {
         observeJob?.cancel()
         observeJob = null
@@ -167,6 +190,9 @@ private fun TodaySnapshot.toUiState(): TodayUiState {
             completed = resolution.arcStatus == ArcStatus.COMPLETED,
             failedOnDate = resolution.failedOnDate,
             sourceArcId = arc.id,
+            endedOn = resolution.failedOnDate ?: arc.endDate,
+            // Start to end in date order; dayStates holds exactly the arc's range.
+            season = resolution.dayStates.toSortedMap().values.toList(),
         )
     }
 
@@ -174,12 +200,22 @@ private fun TodaySnapshot.toUiState(): TodayUiState {
     val statusesForToday = resolution.commitmentStatuses[today]
         // No entry for `today` means the arc hasn't started yet (R2) —
         // dayNumber is 0 until start_date.
-        ?: return TodayUiState.NotStarted(arcName = arc.name, startDate = arc.startDate)
+        ?: return TodayUiState.NotStarted(
+            arcName = arc.name,
+            startDate = arc.startDate,
+            totalDays = resolution.totalDays,
+            // Calendar distance, not a rule: how many days until start_date.
+            daysToGo = ChronoUnit.DAYS.between(today, arc.startDate).toInt(),
+            intention = intention,
+            // Required first, then bonus, each in the arc's own order.
+            commitments = commitments
+                .sortedBy { if (it.isRequired) 0 else 1 }
+                .map { PlannedCommitmentUiState(it.id, it.name, it.isRequired, it.scheduleText()) },
+        )
 
     val entriesByCommitmentId = todayEntries.associateBy { it.commitmentId }
-    val commitmentStates = commitments.mapNotNull { commitment ->
+    val commitmentStates = commitments.map { commitment ->
         val status = statusesForToday.getValue(commitment.id)
-        if (status == CommitmentStatus.NOT_SCHEDULED) return@mapNotNull null
         CommitmentUiState(
             id = commitment.id,
             name = commitment.name,
@@ -189,6 +225,31 @@ private fun TodaySnapshot.toUiState(): TodayUiState {
             unit = commitment.unit,
             currentValue = entriesByCommitmentId[commitment.id]?.value,
             isSatisfied = status == CommitmentStatus.DONE,
+            isScheduledToday = status != CommitmentStatus.NOT_SCHEDULED,
+            scheduleText = commitment.scheduleText(),
+        )
+    }
+    // Display order (docs/tasks/18): required, then bonus, then not today.
+    // sortedBy is stable, so each group keeps the arc's own commitment order.
+    val ordered = commitmentStates.sortedBy { c ->
+        when {
+            !c.isScheduledToday -> 2
+            c.isRequired -> 0
+            else -> 1
+        }
+    }
+    val requiredToday = commitmentStates.filter { it.isRequired && it.isScheduledToday }
+
+    // This ISO week's dates (Monday to Sunday) are plain calendar arithmetic;
+    // every state is read from Resolution.dayStates, which only holds dates
+    // inside the arc — anything else is an empty slot.
+    val monday = today.with(DayOfWeek.MONDAY)
+    val week = (0L..6L).map { offset ->
+        val date = monday.plusDays(offset)
+        WeekStripDay(
+            date = date,
+            state = resolution.dayStates[date] ?: DayState.OUT_OF_RANGE,
+            isToday = date == today,
         )
     }
 
@@ -198,12 +259,33 @@ private fun TodaySnapshot.toUiState(): TodayUiState {
         totalDays = resolution.totalDays,
         today = today,
         todayState = resolution.dayStates[today] ?: DayState.PENDING,
-        commitments = commitmentStates,
+        commitments = ordered,
+        currentStreak = resolution.currentStreak,
+        requiredDone = requiredToday.count { it.isSatisfied },
+        requiredTotal = requiredToday.size,
+        week = week,
         strictness = arc.strictness,
         // R6 — a lookup by the engine's own week key, not a count. Every week
         // the arc's range touches has an entry, so ?: 0 is only a fallback.
         restTokensLeftThisWeek = resolution.restTokensRemaining[isoWeekKey(today)] ?: 0,
     )
+}
+
+// The commitment's weekdays in words, for the "Not today · …" row. Daily is
+// all seven days; WEEKDAYS reads the stored '1,3,5' list (ISO numbers,
+// Mon = 1). This describes the schedule; it never decides whether a date is
+// scheduled — that is Resolution's NOT_SCHEDULED (R3).
+private fun Commitment.scheduleText(): String? {
+    val days = when (scheduleType) {
+        ScheduleType.DAILY -> DayOfWeek.entries.toSet()
+        ScheduleType.WEEKDAYS -> scheduleDays.orEmpty()
+            .split(",")
+            .mapNotNull { it.trim().toIntOrNull() }
+            .filter { it in 1..7 }
+            .map { DayOfWeek.of(it) }
+            .toSet()
+    }
+    return formatSchedule(days).ifBlank { null }
 }
 
 // Presentation choice, not a rule (docs/tasks/14): zero pending -> no card,
@@ -214,6 +296,8 @@ private fun List<PendingMilestone>.toPendingUiState(
     arcStartDate: LocalDate,
     totalDays: Int,
     arcStatus: ArcStatus,
+    arcName: String,
+    todayDayNumber: Int,
 ): PendingMilestoneUiState? = when {
     isEmpty() -> null
     size == 1 -> single().let { m ->
@@ -222,6 +306,7 @@ private fun List<PendingMilestone>.toPendingUiState(
             kind = m.kind,
             dayNumber = m.dayNumber(arcStartDate),
             totalDays = totalDays,
+            triggeredOnDate = m.triggeredOnDate,
             arcCompleted = m.arcCompleted(arcStatus),
         )
     }
@@ -236,6 +321,8 @@ private fun List<PendingMilestone>.toPendingUiState(
                 arcCompleted = m.arcCompleted(arcStatus),
             )
         },
+        arcName = arcName,
+        todayDayNumber = todayDayNumber,
     )
 }
 

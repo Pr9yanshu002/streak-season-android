@@ -82,7 +82,55 @@ class TodayViewModelTest {
         val viewModel = TodayViewModel(repository, clock)
         val state = viewModel.state.first { it !is TodayUiState.Loading }
 
-        assertEquals(TodayUiState.NotStarted(arcName = "Future Arc", startDate = startDate), state)
+        assertEquals(
+            TodayUiState.NotStarted(
+                arcName = "Future Arc",
+                startDate = startDate,
+                // 2026-09-10 .. 2026-10-10 inclusive (R2).
+                totalDays = 31,
+                // 2026-09-01 -> 2026-09-10.
+                daysToGo = 9,
+                intention = null,
+                commitments = emptyList(),
+            ),
+            state,
+        )
+    }
+
+    // Task 18, design 06 — the intention comes through from arcs.intention
+    // (trimmed by createArc), and the planned commitments list required first,
+    // then bonus, each with its schedule in words.
+    @Test
+    fun `not started carries the intention and the planned commitments`() = runTest {
+        val clock = FakeClock(LocalDateTime.of(LocalDate.of(2026, 9, 1), LocalTime.of(10, 0)))
+        val repository = repository(clock)
+        repository.createArc(
+            name = "Spring Sprint",
+            startDate = LocalDate.of(2026, 9, 4),
+            endDate = LocalDate.of(2026, 10, 3),
+            strictness = Strictness.STANDARD,
+            restTokensPerWeek = 1,
+            backfillDays = 2,
+            dayBoundaryHour = 4,
+            intention = "  Get my mornings back.  ",
+            commitments = listOf(
+                NewCommitment(name = "Journal", type = CommitmentType.BINARY, isRequired = false, scheduleType = ScheduleType.DAILY),
+                NewCommitment(
+                    name = "Run 5 km", type = CommitmentType.BINARY, isRequired = true,
+                    scheduleType = ScheduleType.WEEKDAYS, scheduleDays = "1,3,5",
+                ),
+            ),
+        )
+
+        val viewModel = TodayViewModel(repository, clock)
+        val state = viewModel.state.first { it !is TodayUiState.Loading } as TodayUiState.NotStarted
+
+        assertEquals("Get my mornings back.", state.intention)
+        assertEquals(3, state.daysToGo)
+        assertEquals(30, state.totalDays)
+        assertEquals(listOf("Run 5 km", "Journal"), state.commitments.map { it.name })
+        assertEquals(listOf("Mon, Wed, Fri", "Every day"), state.commitments.map { it.scheduleText })
+        assertEquals(listOf(true, false), state.commitments.map { it.isRequired })
     }
 
     @Test
@@ -103,6 +151,9 @@ class TodayViewModelTest {
 
         val viewModel = TodayViewModel(repository, clock)
         val state = viewModel.state.first { it !is TodayUiState.Loading }
+        // "You showed up X of Y" is the recap's own complete/counted days (R19),
+        // read through the same loader the recap screen uses.
+        val recap = requireNotNull(repository.getRecapScreenData(arcId)).recap
 
         assertEquals(
             TodayUiState.Ended(
@@ -111,6 +162,12 @@ class TodayViewModelTest {
                 completed = true,
                 failedOnDate = null,
                 sourceArcId = arcId,
+                // Completed: ended on the arc's own end date.
+                endedOn = LocalDate.of(2026, 9, 10),
+                // No commitments at all, so every day is complete (R5's empty case).
+                season = List(10) { DayState.COMPLETE },
+                daysShowedUp = recap.completeDays,
+                daysCounted = recap.countedDays,
             ),
             state,
         )
@@ -146,6 +203,7 @@ class TodayViewModelTest {
 
         val viewModel = TodayViewModel(repository, clock)
         val state = viewModel.state.first { it !is TodayUiState.Loading }
+        val recap = requireNotNull(repository.getRecapScreenData(arcId)).recap
 
         assertEquals(
             TodayUiState.Ended(
@@ -154,6 +212,12 @@ class TodayViewModelTest {
                 completed = false,
                 failedOnDate = LocalDate.of(2026, 9, 1),
                 sourceArcId = arcId,
+                // Failed: ended on the failure date, not the end date.
+                endedOn = LocalDate.of(2026, 9, 1),
+                // Sep 1-9 missed, Sep 10 (today) pending, Sep 11-30 still to come.
+                season = List(9) { DayState.MISSED } + DayState.PENDING + List(20) { DayState.FUTURE },
+                daysShowedUp = recap.completeDays,
+                daysCounted = recap.countedDays,
             ),
             state,
         )
@@ -185,6 +249,8 @@ class TodayViewModelTest {
         // Crossing day 5 of 20 (2026-09-05), not today (day 7) — R12 amended.
         assertEquals(5, pending.dayNumber)
         assertEquals(20, pending.totalDays)
+        // Design 04's "Day 5 of 20 · 5 September" reads the crossing date.
+        assertEquals(LocalDate.of(2026, 9, 5), pending.triggeredOnDate)
     }
 
     // Task 14 — two or more pending collapse into one Summary, oldest-first and
@@ -226,6 +292,10 @@ class TodayViewModelTest {
         )
         // Reflection attaches to the latest milestone on the card (p75).
         assertEquals(pending.rows.last().id, pending.reflectionTargetId)
+        // Design 05's header: the arc's name and today's day number (16), not
+        // the latest milestone's.
+        assertEquals("Closed For Two Weeks", pending.arcName)
+        assertEquals(16, pending.todayDayNumber)
     }
 
     // Task 17 — the rest-day row. Arc runs Mon 2026-09-07 .. 2026-10-06, one
@@ -324,5 +394,78 @@ class TodayViewModelTest {
         assertEquals(DayState.PENDING, state.todayState)
         assertEquals(0, state.restTokensLeftThisWeek)
         assertNull(state.restDayRow)
+    }
+
+    // Task 18 — what the redesigned Loaded state carries, all mapped from
+    // Resolution. Arc starts Wed 2026-09-09, opened Fri 2026-09-11. Wed and Thu
+    // are complete; today has Meditate done and Water at 1 of 3. Long walk is
+    // required but weekends only, so it's NOT_SCHEDULED today.
+    @Test
+    fun `loaded state maps order, required counts, week and schedule text from Resolution`() = runTest {
+        val today = LocalDate.of(2026, 9, 11)
+        val clock = FakeClock(LocalDateTime.of(today, LocalTime.of(10, 0)))
+        val repository = repository(clock)
+        val result = repository.createArc(
+            name = "Week Arc",
+            startDate = LocalDate.of(2026, 9, 9),
+            endDate = LocalDate.of(2026, 10, 9),
+            strictness = Strictness.STANDARD,
+            restTokensPerWeek = 1,
+            backfillDays = 2,
+            dayBoundaryHour = 4,
+            // Deliberately not in display order: the mapper reorders.
+            commitments = listOf(
+                NewCommitment(name = "Meditate", type = CommitmentType.BINARY, isRequired = true, scheduleType = ScheduleType.DAILY),
+                NewCommitment(
+                    name = "Long walk", type = CommitmentType.BINARY, isRequired = true,
+                    scheduleType = ScheduleType.WEEKDAYS, scheduleDays = "6,7",
+                ),
+                NewCommitment(
+                    name = "Read", type = CommitmentType.DURATION, targetValue = 20.0, isRequired = false,
+                    scheduleType = ScheduleType.DAILY,
+                ),
+                NewCommitment(
+                    name = "Water", type = CommitmentType.COUNTER, targetValue = 3.0, unit = "glasses",
+                    isRequired = true, scheduleType = ScheduleType.DAILY,
+                ),
+            ),
+        )
+        val arcId = (result as CreateArcResult.Created).arcId
+        val ids = repository.getCommitments(arcId).associate { it.name to it.id }
+        for (date in listOf(LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10))) {
+            repository.recordEntry(arcId, date, ids.getValue("Meditate"), 1.0)
+            repository.recordEntry(arcId, date, ids.getValue("Water"), 3.0)
+        }
+        repository.recordEntry(arcId, today, ids.getValue("Meditate"), 1.0)
+        repository.recordEntry(arcId, today, ids.getValue("Water"), 1.0)
+
+        val viewModel = TodayViewModel(repository, clock)
+        val state = viewModel.state.first { it is TodayUiState.Loaded } as TodayUiState.Loaded
+
+        // Required, then bonus, then not today.
+        assertEquals(listOf("Meditate", "Water", "Read", "Long walk"), state.commitments.map { it.name })
+        val longWalk = state.commitments.last()
+        assertEquals(false, longWalk.isScheduledToday)
+        assertEquals("Saturdays and Sundays", longWalk.scheduleText)
+        assertEquals("Every day", state.commitments.first().scheduleText)
+
+        // Long walk is required but not scheduled today, so it isn't counted.
+        assertEquals(1, state.requiredDone)
+        assertEquals(2, state.requiredTotal)
+
+        // Pending today is skipped by R11; Wed and Thu count.
+        assertEquals(2, state.currentStreak)
+        assertEquals(false, state.isDayComplete)
+
+        // Mon 7 .. Sun 13. The arc starts Wednesday, so Mon/Tue are empty slots.
+        assertEquals(
+            listOf(
+                DayState.OUT_OF_RANGE, DayState.OUT_OF_RANGE, DayState.COMPLETE, DayState.COMPLETE,
+                DayState.PENDING, DayState.FUTURE, DayState.FUTURE,
+            ),
+            state.week.map { it.state },
+        )
+        assertEquals(LocalDate.of(2026, 9, 7), state.week.first().date)
+        assertEquals(listOf(false, false, false, false, true, false, false), state.week.map { it.isToday })
     }
 }
