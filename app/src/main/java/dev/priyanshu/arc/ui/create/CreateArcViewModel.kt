@@ -21,13 +21,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-enum class CreateArcStep { NAME_AND_DATES, COMMITMENTS, RULES_AND_INTENTION, REVIEW }
+enum class CreateArcStep { NAME_AND_DATES, COMMITMENTS, STRICTNESS, INTENTION, REVIEW }
 
 // A commitment as the creation flow edits it. Not NewCommitment: this needs
-// a stable local id so the step-2 list can edit/remove a row before it's
-// ever sent to the repository, and scheduleDays as a real Set<Int> rather
-// than the raw '1,3,5' wire string — that string-building is deferred to
-// the one place that actually needs it, right before createArc() is called.
+// a stable local id so the commitments step's list can edit/remove a row
+// before it's ever sent to the repository, and scheduleDays as a real
+// Set<Int> rather than the raw '1,3,5' wire string — that string-building
+// is deferred to the one place that actually needs it, right before
+// createArc() is called.
 data class CommitmentDraft(
     val localId: String = UUID.randomUUID().toString(),
     val name: String = "",
@@ -39,10 +40,10 @@ data class CommitmentDraft(
     val scheduleDays: Set<Int> = emptySet(),
 )
 
-// Everything the three-step flow holds in memory. Nothing here is written to
-// the database until Begin (R15: "draft is not used in v0 — the creation
-// flow holds state in memory and writes the arc only when the user confirms
-// it").
+// Everything the create flow holds in memory across its five steps. Nothing
+// here is written to the database until Begin (R15: "draft is not used in
+// v0 — the creation flow holds state in memory and writes the arc only when
+// the user confirms it").
 data class CreateArcUiState(
     val step: CreateArcStep = CreateArcStep.NAME_AND_DATES,
     val today: LocalDate,
@@ -57,6 +58,7 @@ data class CreateArcUiState(
     val intention: String = "",
     val activeArcExistsError: Boolean = false,
     val isSubmitting: Boolean = false,
+    val showErrors: Boolean = false,
 ) {
     // R16, called, not re-derived — see earliestAllowedStartDate/isValidStartDate.
     val earliestAllowedStartDate: LocalDate get() = earliestAllowedStartDate(today, backfillDays)
@@ -100,12 +102,17 @@ data class CreateArcUiState(
                 .any { it.value > 1 }
             return if (duplicated) "Two or more commitments share a name. That's allowed, but worth checking." else null
         }
-
-    // Changing backfill_days (step 3) can invalidate an already-chosen start
-    // date. Re-checked with the same isValidStartDate call step 1 uses —
-    // surfaced here rather than silently moving the user's start date.
-    val step3Error: String?
+    // Changing backfill_days on the strictness step can make an already-chosen
+    // start date too early (R16). Same isValidStartDate check step 1 uses.
+    val strictnessError: String?
         get() = startDateError?.let { "$it Go back to step 1 to fix it." }
+
+    val blockingError: String? get() = when(step){
+        CreateArcStep.NAME_AND_DATES -> step1Error
+        CreateArcStep.COMMITMENTS -> step2Error
+        CreateArcStep.STRICTNESS -> strictnessError
+        CreateArcStep.REVIEW , CreateArcStep.INTENTION -> null
+    }
 }
 
 class CreateArcViewModel(
@@ -129,7 +136,8 @@ class CreateArcViewModel(
 
         // Remix (R9): pre-fill name, commitments and the rule set from the
         // failed arc, so the retry starts from the same rules it ran under.
-        // The rule fields stay editable on step 3 — this only seeds them.
+        // The rule fields stay editable on the strictness step — this only
+        // seeds them.
         // Dates always start fresh (today..+59, set above) and intention is
         // deliberately left blank — the user writes a new one, not the old
         // one (docs/tasks/12).
@@ -185,36 +193,32 @@ class CreateArcViewModel(
         val previous = when (s.step) {
             CreateArcStep.NAME_AND_DATES -> CreateArcStep.NAME_AND_DATES
             CreateArcStep.COMMITMENTS -> CreateArcStep.NAME_AND_DATES
-            CreateArcStep.RULES_AND_INTENTION -> CreateArcStep.COMMITMENTS
-            CreateArcStep.REVIEW -> CreateArcStep.RULES_AND_INTENTION
+            CreateArcStep.STRICTNESS -> CreateArcStep.COMMITMENTS
+            CreateArcStep.INTENTION -> CreateArcStep.STRICTNESS
+            CreateArcStep.REVIEW -> CreateArcStep.INTENTION
         }
-        s.copy(step = previous)
+        s.copy(step = previous, showErrors = false)
     }
 
-    // No-ops (rather than crashing or forcing a jump) if the current step is
-    // invalid — the inline error is already visible, and the Next/Begin
-    // button driving this is disabled while it's non-null anyway.
+    // Next is always enabled. If the current step is invalid, next() stays put
+    // and turns on showErrors so the screen draws that step's errors; moving
+    // on (or back) turns them off again for the new step.
     fun next() = _state.update { s ->
-        val blockingError = when (s.step) {
-            CreateArcStep.NAME_AND_DATES -> s.step1Error
-            CreateArcStep.COMMITMENTS -> s.step2Error
-            CreateArcStep.RULES_AND_INTENTION -> s.step3Error
-            CreateArcStep.REVIEW -> null
-        }
-        if (blockingError != null) return@update s
+        if (s.blockingError != null) return@update s.copy(showErrors = true)
 
         val nextStep = when (s.step) {
             CreateArcStep.NAME_AND_DATES -> CreateArcStep.COMMITMENTS
-            CreateArcStep.COMMITMENTS -> CreateArcStep.RULES_AND_INTENTION
-            CreateArcStep.RULES_AND_INTENTION -> CreateArcStep.REVIEW
+            CreateArcStep.COMMITMENTS -> CreateArcStep.STRICTNESS
+            CreateArcStep.STRICTNESS -> CreateArcStep.INTENTION
+            CreateArcStep.INTENTION -> CreateArcStep.REVIEW
             CreateArcStep.REVIEW -> CreateArcStep.REVIEW
         }
-        s.copy(step = nextStep)
+        s.copy(step = nextStep, showErrors = false)
     }
 
     fun begin(onCreated: () -> Unit) {
         val s = _state.value
-        if (s.step1Error != null || s.step2Error != null || s.step3Error != null) return
+        if (s.step1Error != null || s.step2Error != null || s.strictnessError != null) return
 
         viewModelScope.launch {
             _state.update { it.copy(isSubmitting = true, activeArcExistsError = false) }

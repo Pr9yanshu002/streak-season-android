@@ -23,6 +23,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -91,13 +92,13 @@ class CreateArcViewModelTest {
     }
 
     @Test
-    fun `lowering backfillDays can invalidate an already-chosen start date, surfaced as step3Error`() {
+    fun `lowering backfillDays can invalidate an already-chosen start date, surfaced as strictnessError`() {
         viewModel.setStartDate(LocalDate.of(2026, 9, 10)) // valid while backfillDays = 2
         assertNull(viewModel.state.value.startDateError)
 
         viewModel.setBackfillDays(0) // earliest allowed becomes today itself
         assertNotNull(viewModel.state.value.startDateError)
-        assertNotNull(viewModel.state.value.step3Error)
+        assertNotNull(viewModel.state.value.strictnessError)
     }
 
     @Test
@@ -142,6 +143,64 @@ class CreateArcViewModelTest {
         viewModel.setName("My Arc")
         viewModel.next()
         assertEquals(CreateArcStep.COMMITMENTS, viewModel.state.value.step)
+    }
+
+    // Task 19 — Next is always enabled. A blocked next() doesn't move; it
+    // turns on showErrors so the screen draws the step's errors.
+    @Test
+    fun `a blocked next sets showErrors and stays on NAME_AND_DATES`() {
+        viewModel.setName("")
+        viewModel.next()
+        val state = viewModel.state.value
+        assertEquals(CreateArcStep.NAME_AND_DATES, state.step)
+        assertTrue(state.showErrors)
+    }
+
+    @Test
+    fun `after a blocked next, fixing the name and calling next moves to COMMITMENTS with showErrors off`() {
+        viewModel.setName("")
+        viewModel.next()
+        assertTrue(viewModel.state.value.showErrors)
+
+        viewModel.setName("My Arc")
+        viewModel.next()
+        val state = viewModel.state.value
+        assertEquals(CreateArcStep.COMMITMENTS, state.step)
+        assertFalse(state.showErrors)
+    }
+
+    @Test
+    fun `next walks every step to REVIEW and back from REVIEW returns to INTENTION`() {
+        viewModel.setName("My Arc")
+        viewModel.saveCommitment(CommitmentDraft(name = "Meditate", isRequired = true))
+
+        assertEquals(CreateArcStep.NAME_AND_DATES, viewModel.state.value.step)
+        viewModel.next()
+        assertEquals(CreateArcStep.COMMITMENTS, viewModel.state.value.step)
+        viewModel.next()
+        assertEquals(CreateArcStep.STRICTNESS, viewModel.state.value.step)
+        viewModel.next()
+        assertEquals(CreateArcStep.INTENTION, viewModel.state.value.step)
+        viewModel.next()
+        assertEquals(CreateArcStep.REVIEW, viewModel.state.value.step)
+
+        viewModel.back()
+        assertEquals(CreateArcStep.INTENTION, viewModel.state.value.step)
+    }
+
+    @Test
+    fun `back resets showErrors`() {
+        viewModel.setName("My Arc")
+        viewModel.next() // -> COMMITMENTS
+        viewModel.next() // blocked: no commitments yet
+        val blocked = viewModel.state.value
+        assertEquals(CreateArcStep.COMMITMENTS, blocked.step)
+        assertTrue(blocked.showErrors)
+
+        viewModel.back()
+        val state = viewModel.state.value
+        assertEquals(CreateArcStep.NAME_AND_DATES, state.step)
+        assertFalse(state.showErrors)
     }
 
     // docs/tasks/12-lifecycle-milestones.md: remix pre-fills name and
@@ -243,7 +302,7 @@ class CreateArcViewModelTest {
         assertEquals(6, newArc.dayBoundaryHour)
     }
 
-    // "Keep them editable on step 3": pre-fill seeds the rule fields but must
+    // "Keep them editable on the strictness step": pre-fill seeds the rule fields but must
     // not lock them — the user can still change any of them before Begin.
     @Test
     fun `remixed rule fields stay editable after pre-fill`() = runTest {
@@ -292,7 +351,7 @@ class CreateArcViewModelTest {
     // Task 14, Part 2 — the pre-filled backfill_days must flow into R16's
     // earliest-start boundary, not the create-flow default of 2. A source with
     // backfill 5 moves the earliest start to today - 5, and the step-1 /
-    // step-3 start-date re-validation must use that window, so a start date
+    // strictness-step start-date re-validation must use that window, so a start date
     // before it is still flagged.
     @Test
     fun `remixed backfill_days moves the R16 earliest start date and re-validation uses it`() = runTest {
@@ -328,11 +387,11 @@ class CreateArcViewModelTest {
         assertEquals(today.minusDays(5), prefilled.earliestAllowedStartDate)
 
         // A start one day before the (wider) window is still flagged on both
-        // the step-1 and step-3 checks.
+        // the step-1 and strictness-step checks.
         remixViewModel.setStartDate(today.minusDays(6))
         val outside = remixViewModel.state.value
         assertNotNull(outside.startDateError)
-        assertNotNull(outside.step3Error)
+        assertNotNull(outside.strictnessError)
 
         // The edge of the window is accepted; a date valid only under the
         // default backfill-2 window (today - 5 .. today - 3) is accepted too,

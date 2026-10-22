@@ -113,7 +113,7 @@ fun CreateArcScreen(state: CreateArcUiState, actions: CreateArcActions, modifier
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text("Step ${state.step.ordinal + 1} of 4", style = MaterialTheme.typography.labelLarge)
+            Text(text = if(state.step == CreateArcStep.REVIEW) "Review" else "Step ${state.step.ordinal + 1} of 4", style = MaterialTheme.typography.labelLarge)
             TextButton(onClick = actions.onCancel) { Text("Cancel") }
         }
         Spacer(Modifier.height(8.dp))
@@ -122,7 +122,8 @@ fun CreateArcScreen(state: CreateArcUiState, actions: CreateArcActions, modifier
             when (state.step) {
                 CreateArcStep.NAME_AND_DATES -> NameAndDatesStep(state, actions)
                 CreateArcStep.COMMITMENTS -> CommitmentsStep(state, actions)
-                CreateArcStep.RULES_AND_INTENTION -> RulesAndIntentionStep(state, actions)
+                CreateArcStep.STRICTNESS -> StrictnessStep(state, actions)
+                CreateArcStep.INTENTION -> IntentionStep(state, actions)
                 CreateArcStep.REVIEW -> ReviewStep(state)
             }
         }
@@ -143,13 +144,7 @@ fun CreateArcScreen(state: CreateArcUiState, actions: CreateArcActions, modifier
                     }
                 }
             } else {
-                val blockingError = when (state.step) {
-                    CreateArcStep.NAME_AND_DATES -> state.step1Error
-                    CreateArcStep.COMMITMENTS -> state.step2Error
-                    CreateArcStep.RULES_AND_INTENTION -> state.step3Error
-                    CreateArcStep.REVIEW -> null
-                }
-                Button(onClick = actions.onNext, enabled = blockingError == null) { Text("Next") }
+                Button(onClick = actions.onNext,) { Text("Next") }
             }
         }
     }
@@ -167,8 +162,8 @@ private fun NameAndDatesStep(state: CreateArcUiState, actions: CreateArcActions)
             onValueChange = actions.onNameChange,
             label = { Text("Name") },
             singleLine = true,
-            isError = state.nameError != null,
-            supportingText = { state.nameError?.let { Text(it) } },
+            isError = state.shown(state.nameError)!=null,
+            supportingText = { state.shown(state.nameError)?.let { Text(it) } },
             modifier = Modifier.fillMaxWidth(),
         )
 
@@ -179,7 +174,7 @@ private fun NameAndDatesStep(state: CreateArcUiState, actions: CreateArcActions)
                 minDate = state.earliestAllowedStartDate,
                 onDateChange = actions.onStartDateChange,
             )
-            state.startDateError?.let {
+            state.shown(state.startDateError)?.let {
                 Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         }
@@ -197,7 +192,7 @@ private fun NameAndDatesStep(state: CreateArcUiState, actions: CreateArcActions)
                 minDate = state.startDate,
                 onDateChange = actions.onEndDateChange,
             )
-            state.endDateError?.let {
+            state.shown(state.endDateError)?.let {
                 Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         }
@@ -270,7 +265,7 @@ private fun CommitmentsStep(state: CreateArcUiState, actions: CreateArcActions) 
             Text("Up to 10 commitments per arc.", style = MaterialTheme.typography.bodySmall)
         }
 
-        state.step2Error?.let {
+        state.shown(state.step2Error)?.let {
             Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
         state.duplicateCommitmentNameWarning?.let {
@@ -418,12 +413,15 @@ private fun CommitmentEditorDialog(
 
 private val WEEKDAY_LABELS = listOf(1 to "Mon", 2 to "Tue", 3 to "Wed", 4 to "Thu", 5 to "Fri", 6 to "Sat", 7 to "Sun")
 
+// Errors stay hidden until the user taps Next on an invalid step.
+private fun CreateArcUiState.shown(error:String?) : String? = if(showErrors)  error else null
+
 // ---------------------------------------------------------------------------
-// Step 3 — rules and intention
+// Step 3 — strictness (and the advanced day-boundary/backfill settings)
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun RulesAndIntentionStep(state: CreateArcUiState, actions: CreateArcActions) {
+private fun StrictnessStep(state: CreateArcUiState, actions: CreateArcActions) {
     var showAdvanced by remember { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -484,19 +482,25 @@ private fun RulesAndIntentionStep(state: CreateArcUiState, actions: CreateArcAct
             }
         }
 
-        state.step3Error?.let {
+        state.shown(state.strictnessError)?.let {
             Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
 
-        HorizontalDivider()
-
-        OutlinedTextField(
-            value = state.intention,
-            onValueChange = actions.onIntentionChange,
-            label = { Text("Intention (optional)") },
-            modifier = Modifier.fillMaxWidth(),
-        )
     }
+}
+
+// ---------------------------------------------------------------------------
+// Step 4 — intention
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun IntentionStep(state: CreateArcUiState, actions: CreateArcActions){
+    OutlinedTextField(
+        value = state.intention,
+        onValueChange = actions.onIntentionChange,
+        label = { Text("Intention (optional)") },
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 @Composable
@@ -516,7 +520,7 @@ private fun StrictnessOption(
 }
 
 // ---------------------------------------------------------------------------
-// Step 4 — review
+// Step 5 — review
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -548,3 +552,4 @@ private fun ReviewStep(state: CreateArcUiState) {
         }
     }
 }
+
