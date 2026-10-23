@@ -1,7 +1,9 @@
 package dev.priyanshu.arc.ui.create
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -41,11 +44,15 @@ import androidx.compose.ui.unit.dp
 import dev.priyanshu.arc.domain.model.CommitmentType
 import dev.priyanshu.arc.domain.model.ScheduleType
 import dev.priyanshu.arc.domain.model.Strictness
+import dev.priyanshu.arc.ui.components.StreakCard
 import dev.priyanshu.arc.ui.theme.Space
+import dev.priyanshu.arc.ui.theme.StreakTheme
 import java.time.LocalDate
 import java.util.UUID
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @Composable
 fun CreateArcRoute(
@@ -156,43 +163,84 @@ fun CreateArcScreen(state: CreateArcUiState, actions: CreateArcActions, modifier
 @Composable
 private fun NameAndDatesStep(state: CreateArcUiState, actions: CreateArcActions) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        OutlinedTextField(
+        StreakTextField(
             value = state.name,
             onValueChange = actions.onNameChange,
-            label = { Text("Name") },
-            singleLine = true,
-            isError = state.shown(state.nameError)!=null,
-            supportingText = { state.shown(state.nameError)?.let { Text(it) } },
-            modifier = Modifier.fillMaxWidth(),
+            label = "Name",
+            placeholder = "Winter Arc",
+            error = state.shown(state.nameError),
         )
-
-        Column {
-            Text("Start date", style = MaterialTheme.typography.labelLarge)
+        Column(verticalArrangement = Arrangement.spacedBy(Space.s2)) {
+            FieldLabel("Starts")
+            val startError = state.shown(state.startDateError)
             DatePickerField(
                 date = state.startDate,
+                text = if (state.startDate == state.today) {
+                    "Today · ${state.startDate.shortText()}"
+                } else {
+                    state.startDate.shortText()
+                },
                 minDate = state.earliestAllowedStartDate,
+                isError = startError != null,
                 onDateChange = actions.onStartDateChange,
             )
-            state.shown(state.startDateError)?.let {
-                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            // The error replaces the hint, so the field never has two lines of small text under it.
+            if (startError != null) {
+                FieldError(startError)
+            } else {
+                Text(
+                    "You can start up to ${state.backfillDays} days back, or any day ahead.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = StreakTheme.colors.inkMuted,
+                )
             }
         }
 
-        Column {
-            Text("End date", style = MaterialTheme.typography.labelLarge)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(30, 60, 75, 90).forEach { days ->
-                    OutlinedButton(onClick = { actions.onQuickDuration(days) }) { Text("$days d") }
+        Column(verticalArrangement = Arrangement.spacedBy(Space.s2)) {
+            FieldLabel("How long")
+            FlowRow(
+                modifier = Modifier.selectableGroup(),
+                horizontalArrangement = Arrangement.spacedBy(Space.s2),
+                verticalArrangement = Arrangement.spacedBy(Space.s2),
+            ) {
+                QUICK_LENGTHS.forEach { days ->
+                    ChoiceChip(
+                        text = "$days days",
+                        selected = state.lengthInDays == days,
+                        onClick = { actions.onQuickDuration(days) },
+                    )
                 }
             }
-            Spacer(Modifier.height(8.dp))
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(Space.s2)) {
+            FieldLabel("Ends")
+            val endError = state.shown(state.endDateError)
             DatePickerField(
                 date = state.endDate,
+                text = state.endDate.fullText(),
                 minDate = state.startDate,
+                isError = endError != null,
                 onDateChange = actions.onEndDateChange,
             )
-            state.shown(state.endDateError)?.let {
-                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            endError?.let { FieldError(it) }
+        }
+
+        // Only when the dates make sense; a negative "-3 days" would just confuse.
+        if (state.endDateError == null) {
+            StreakCard {
+                Row(horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
+                    Text(
+                        "${state.lengthInDays} days",
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.alignByBaseline(),
+                    )
+                    Text(
+                        "${state.startDate.shortText()} – ${state.endDate.shortText()}, both days included",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = StreakTheme.colors.inkMuted,
+                        modifier = Modifier.alignByBaseline(),
+                    )
+                }
             }
         }
     }
@@ -200,9 +248,9 @@ private fun NameAndDatesStep(state: CreateArcUiState, actions: CreateArcActions)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DatePickerField(date: LocalDate, minDate: LocalDate?, onDateChange: (LocalDate) -> Unit) {
+private fun DatePickerField(date: LocalDate, minDate: LocalDate?, onDateChange: (LocalDate) -> Unit,text: String, isError: Boolean) {
     var showDialog by remember { mutableStateOf(false) }
-    OutlinedButton(onClick = { showDialog = true }) { Text(date.toString()) }
+    DateField(text = text, onClick = {showDialog = true}, isError = isError)
 
     if (showDialog) {
         val pickerState = rememberDatePickerState(
@@ -414,6 +462,14 @@ private val WEEKDAY_LABELS = listOf(1 to "Mon", 2 to "Tue", 3 to "Wed", 4 to "Th
 
 // Errors stay hidden until the user taps Next on an invalid step.
 private fun CreateArcUiState.shown(error:String?) : String? = if(showErrors)  error else null
+
+private val SHORT_DATE = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())
+private val FULL_DATE = DateTimeFormatter.ofPattern("EEE d MMM yyyy", Locale.getDefault())
+
+private fun LocalDate.shortText(): String = format(SHORT_DATE)
+private fun LocalDate.fullText(): String = format(FULL_DATE)
+
+private val QUICK_LENGTHS = listOf(30, 60, 75, 90)
 
 // ---------------------------------------------------------------------------
 // Step 3 — strictness (and the advanced day-boundary/backfill settings)

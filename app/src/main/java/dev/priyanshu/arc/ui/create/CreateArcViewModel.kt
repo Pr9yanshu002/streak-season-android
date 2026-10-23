@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.temporal.ChronoUnit
 
 enum class CreateArcStep { NAME_AND_DATES, COMMITMENTS, STRICTNESS, INTENTION, REVIEW }
 
@@ -121,6 +122,8 @@ data class CreateArcUiState(
         CreateArcStep.STRICTNESS -> strictnessError
         CreateArcStep.REVIEW , CreateArcStep.INTENTION -> null
     }
+
+    val lengthInDays: Int get() = ChronoUnit.DAYS.between(startDate, endDate).toInt() + 1
 }
 
 class CreateArcViewModel(

@@ -145,6 +145,34 @@ class CreateArcViewModelTest {
         assertEquals(CreateArcStep.COMMITMENTS, viewModel.state.value.step)
     }
 
+    // Task 19 — lengthInDays counts both the start and the end day, so it
+    // drives the "N days" summary and which "How long" chip is selected.
+    @Test
+    fun `default arc is 60 days long`() {
+        assertEquals(60, viewModel.state.value.lengthInDays)
+    }
+
+    @Test
+    fun `each quick length gives exactly that many days`() {
+        listOf(30, 60, 75, 90).forEach { days ->
+            viewModel.pickQuickDuration(days)
+            assertEquals(days, viewModel.state.value.lengthInDays)
+        }
+    }
+
+    @Test
+    fun `an arc that ends on its start day is 1 day long`() {
+        viewModel.setEndDate(viewModel.state.value.startDate)
+        assertEquals(1, viewModel.state.value.lengthInDays)
+    }
+
+    @Test
+    fun `moving the start date changes the length when the end date stays`() {
+        viewModel.pickQuickDuration(30)
+        viewModel.setStartDate(today.plusDays(10))
+        assertEquals(20, viewModel.state.value.lengthInDays)
+    }
+
     // Task 19 — Next is always enabled. A blocked next() doesn't move; it
     // turns on showErrors so the screen draws the step's errors.
     @Test
