@@ -226,10 +226,12 @@ class CreateArcViewModel(
 
     fun begin(onCreated: () -> Unit) {
         val s = _state.value
+        if (s.isSubmitting) return
         if (s.step1Error != null || s.step2Error != null || s.strictnessError != null) return
 
+        _state.update { it.copy(isSubmitting = true, activeArcExistsError = false) }
+
         viewModelScope.launch {
-            _state.update { it.copy(isSubmitting = true, activeArcExistsError = false) }
             val result = repository.createArc(
                 name = s.name.trim(),
                 startDate = s.startDate,

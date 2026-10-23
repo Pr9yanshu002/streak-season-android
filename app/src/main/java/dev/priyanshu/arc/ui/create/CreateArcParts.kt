@@ -14,7 +14,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
@@ -27,6 +29,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import dev.priyanshu.arc.ui.components.LargeButton
 import dev.priyanshu.arc.ui.components.PreviewFrame
 import dev.priyanshu.arc.ui.components.TouchTarget
 import dev.priyanshu.arc.ui.theme.Space
@@ -102,6 +105,33 @@ fun StepIntro(
     }
 }
 
+@Composable
+fun StepBottomBar(
+    primaryText: String,
+    onPrimary: () -> Unit,
+    onBack: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+){
+    Column(
+        modifier.fillMaxWidth()
+    ){
+        HorizontalDivider()
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = Space.s6, end = Space.s6, top = Space.s4, bottom = Space.s6),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (onBack!=null){
+                LargeButton(text = "Back", onClick = onBack, filled = false, modifier = Modifier.width(112.dp),)
+            }
+            LargeButton(
+                text = primaryText,
+                onClick = onPrimary,
+                filled = true,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
 
 
 @Preview(name = "Header and intro · light")

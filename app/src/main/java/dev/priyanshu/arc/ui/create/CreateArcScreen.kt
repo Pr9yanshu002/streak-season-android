@@ -137,27 +137,15 @@ fun CreateArcScreen(state: CreateArcUiState, actions: CreateArcActions, modifier
                 CreateArcStep.REVIEW -> ReviewStep(state)
             }
         }
-
-        Row( modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = Space.s6, vertical = Space.s4), horizontalArrangement = Arrangement.SpaceBetween) {
-            if (state.step != CreateArcStep.NAME_AND_DATES) {
-                OutlinedButton(onClick = actions.onBack) { Text("Back") }
-            } else {
-                Spacer(Modifier.height(1.dp))
-            }
-            if (state.step == CreateArcStep.REVIEW) {
-                Button(onClick = actions.onBegin, enabled = !state.isSubmitting) {
-                    if (state.isSubmitting) {
-                        CircularProgressIndicator(modifier = Modifier.height(20.dp))
-                    } else {
-                        Text("Begin")
-                    }
-                }
-            } else {
-                Button(onClick = actions.onNext,) { Text("Next") }
-            }
-        }
+        StepBottomBar(
+            primaryText = when (state.step) {
+                CreateArcStep.INTENTION -> "Review"
+                CreateArcStep.REVIEW -> if (state.isSubmitting) "Starting…" else "Begin ${state.name.trim()}"
+                else -> "Next"
+            },
+            onPrimary = if (state.step == CreateArcStep.REVIEW) actions.onBegin else actions.onNext,
+            onBack = if (state.step == CreateArcStep.NAME_AND_DATES) null else actions.onBack,
+        )
     }
 }
 

@@ -203,6 +203,31 @@ class CreateArcViewModelTest {
         assertFalse(state.showErrors)
     }
 
+    // Task 19 — isSubmitting is set before begin() launches anything, and a
+    // second begin() while it's set does nothing. Without the guard, two quick
+    // taps both pass createArc's R15 check before either insert lands, and two
+    // active arcs get created.
+    @Test
+    fun `begin sets isSubmitting straight away and a second begin is ignored`() = runTest {
+        viewModel.setName("My Arc")
+        viewModel.saveCommitment(CommitmentDraft(name = "Meditate", isRequired = true))
+
+        var createdCalls = 0
+        val created = CompletableDeferred<Unit>()
+        val onCreated = {
+            createdCalls++
+            created.complete(Unit)
+            Unit
+        }
+        viewModel.begin(onCreated)
+        assertTrue(viewModel.state.value.isSubmitting)
+        viewModel.begin(onCreated)
+        created.await()
+
+        assertEquals(1, database.arcDao().count())
+        assertEquals(1, createdCalls)
+    }
+
     // docs/tasks/12-lifecycle-milestones.md: remix pre-fills name and
     // commitments from the source arc, but never intention or dates — those
     // start fresh, same as a plain "start an arc".
