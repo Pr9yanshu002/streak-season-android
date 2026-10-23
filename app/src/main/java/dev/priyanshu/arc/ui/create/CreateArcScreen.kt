@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import dev.priyanshu.arc.domain.model.CommitmentType
 import dev.priyanshu.arc.domain.model.ScheduleType
 import dev.priyanshu.arc.domain.model.Strictness
+import dev.priyanshu.arc.ui.theme.Space
 import java.time.LocalDate
 import java.util.UUID
 import org.koin.androidx.compose.koinViewModel
@@ -108,17 +109,26 @@ class CreateArcActions(
 
 @Composable
 fun CreateArcScreen(state: CreateArcUiState, actions: CreateArcActions, modifier: Modifier = Modifier) {
-    Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(text = if(state.step == CreateArcStep.REVIEW) "Review" else "Step ${state.step.ordinal + 1} of 4", style = MaterialTheme.typography.labelLarge)
-            TextButton(onClick = actions.onCancel) { Text("Cancel") }
-        }
-        Spacer(Modifier.height(8.dp))
-
-        Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+    Column(modifier = modifier.fillMaxSize()) {
+        StepHeader(
+            // Review fills every bar.
+            currentStep = state.step.number ?: NUMBERED_STEP_COUNT,
+            totalSteps = NUMBERED_STEP_COUNT,
+            onClose = actions.onCancel,
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = Space.s6, vertical = Space.s4),
+            verticalArrangement = Arrangement.spacedBy(Space.s6),
+        ){
+            val text = state.step.text()
+            StepIntro(
+                eyebrow = state.step.number?.let { "Step $it of $NUMBERED_STEP_COUNT" },
+                title = text.title,
+                subtitle = text.subtitle,
+            )
             when (state.step) {
                 CreateArcStep.NAME_AND_DATES -> NameAndDatesStep(state, actions)
                 CreateArcStep.COMMITMENTS -> CommitmentsStep(state, actions)
@@ -128,8 +138,9 @@ fun CreateArcScreen(state: CreateArcUiState, actions: CreateArcActions, modifier
             }
         }
 
-        Spacer(Modifier.height(8.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Row( modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Space.s6, vertical = Space.s4), horizontalArrangement = Arrangement.SpaceBetween) {
             if (state.step != CreateArcStep.NAME_AND_DATES) {
                 OutlinedButton(onClick = actions.onBack) { Text("Back") }
             } else {
@@ -553,3 +564,20 @@ private fun ReviewStep(state: CreateArcUiState) {
     }
 }
 
+// The words at the top of each step, in one place so the design copy is easy
+// to check and change.
+private class StepText(val title: String, val subtitle: String? = null)
+
+private fun CreateArcStep.text(): StepText = when (this) {
+    CreateArcStep.NAME_AND_DATES -> StepText("Name it and pick the dates")
+    CreateArcStep.COMMITMENTS -> StepText(
+        "What will you do?",
+        "Required ones decide whether a day counts. Bonus ones are tracked, but never break a day.",
+    )
+    CreateArcStep.STRICTNESS -> StepText("How strict should it be?")
+    CreateArcStep.INTENTION -> StepText(
+        "Why are you doing this?",
+        "One line, in your own words. You'll see it before day 1, and again in your recap.",
+    )
+    CreateArcStep.REVIEW -> StepText("Ready to begin?")
+}

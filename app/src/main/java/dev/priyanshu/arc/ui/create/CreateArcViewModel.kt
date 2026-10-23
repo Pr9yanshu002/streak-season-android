@@ -23,6 +23,14 @@ import kotlinx.coroutines.launch
 
 enum class CreateArcStep { NAME_AND_DATES, COMMITMENTS, STRICTNESS, INTENTION, REVIEW }
 
+// The steps the user counts through ("Step 2 of 4", the header bars).
+// Review is not one of them: it shows no number.
+const val NUMBERED_STEP_COUNT = 4
+
+// This step's place in "Step N of 4", or null on Review.
+val CreateArcStep.number: Int?
+    get() = if (this == CreateArcStep.REVIEW) null else ordinal + 1
+
 // A commitment as the creation flow edits it. Not NewCommitment: this needs
 // a stable local id so the commitments step's list can edit/remove a row
 // before it's ever sent to the repository, and scheduleDays as a real
