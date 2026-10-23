@@ -13,6 +13,7 @@ import dev.priyanshu.arc.domain.rules.earliestAllowedStartDate
 import dev.priyanshu.arc.domain.rules.hasAtLeastOneRequiredCommitment
 import dev.priyanshu.arc.domain.rules.isValidArcName
 import dev.priyanshu.arc.domain.rules.isValidStartDate
+import dev.priyanshu.arc.ui.components.formatInputAmount
 import java.time.LocalDate
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,12 +43,37 @@ data class CommitmentDraft(
     val localId: String = UUID.randomUUID().toString(),
     val name: String = "",
     val type: CommitmentType = CommitmentType.BINARY,
-    val targetValue: Double? = null,
+    val targetText: String = "",
     val unit: String? = null,
     val isRequired: Boolean = true,
     val scheduleType: ScheduleType = ScheduleType.DAILY,
     val scheduleDays: Set<Int> = emptySet(),
-)
+) {
+    val targetValue: Double? get() = targetText.trim().toDoubleOrNull()
+
+    val needsTarget: Boolean get() = type == CommitmentType.COUNTER || type == CommitmentType.DURATION
+
+    // What stops this draft being saved, or null if it's ready.
+    val error: String?
+        get() = when {
+            name.isBlank() -> "Give it a name."
+            // isFinite: toDoubleOrNull() also accepts "NaN" and "Infinity".
+            needsTarget && targetValue.let { it == null || !it.isFinite() || it <= 0.0 } ->
+                "Set a target above 0."
+            needsTarget && unit.isNullOrBlank() -> "Add a unit, like ml or min."
+            scheduleType == ScheduleType.WEEKDAYS && scheduleDays.isEmpty() -> "Pick at least one day."
+            else -> null
+        }
+
+    // The tidy version that goes into the list: trimmed, and with fields that
+    // don't apply to this type cleared.
+    fun cleaned(): CommitmentDraft = copy(
+        name = name.trim(),
+        targetText = if (needsTarget) targetText.trim() else "",
+        unit = if (needsTarget) unit?.trim() else null,
+        scheduleDays = if (scheduleType == ScheduleType.WEEKDAYS) scheduleDays else emptySet(),
+    )
+}
 
 // Everything the create flow holds in memory across its five steps. Nothing
 // here is written to the database until Begin (R15: "draft is not used in
@@ -68,6 +94,8 @@ data class CreateArcUiState(
     val activeArcExistsError: Boolean = false,
     val isSubmitting: Boolean = false,
     val showErrors: Boolean = false,
+    val editing: CommitmentDraft? = null,
+    val editorShowErrors: Boolean = false,
 ) {
     // R16, called, not re-derived — see earliestAllowedStartDate/isValidStartDate.
     val earliestAllowedStartDate: LocalDate get() = earliestAllowedStartDate(today, backfillDays)
@@ -123,6 +151,11 @@ data class CreateArcUiState(
         CreateArcStep.REVIEW , CreateArcStep.INTENTION -> null
     }
 
+    // Whether the open editor holds a commitment already in the list (Edit),
+    // rather than a new one (Add).
+    val isEditingExisting: Boolean
+        get() = editing?.let { draft -> commitments.any { it.localId == draft.localId } } ?: false
+
     val lengthInDays: Int get() = ChronoUnit.DAYS.between(startDate, endDate).toInt() + 1
 }
 
@@ -177,16 +210,6 @@ class CreateArcViewModel(
 
     fun pickQuickDuration(days: Int) = _state.update { it.copy(endDate = it.startDate.plusDays((days - 1).toLong())) }
 
-    fun saveCommitment(draft: CommitmentDraft) = _state.update { s ->
-        val index = s.commitments.indexOfFirst { it.localId == draft.localId }
-        val commitments = if (index >= 0) {
-            s.commitments.toMutableList().also { it[index] = draft }
-        } else {
-            s.commitments + draft
-        }
-        s.copy(commitments = commitments)
-    }
-
     fun removeCommitment(localId: String) =
         _state.update { it.copy(commitments = it.commitments.filterNot { c -> c.localId == localId }) }
 
@@ -208,7 +231,8 @@ class CreateArcViewModel(
             CreateArcStep.INTENTION -> CreateArcStep.STRICTNESS
             CreateArcStep.REVIEW -> CreateArcStep.INTENTION
         }
-        s.copy(step = previous, showErrors = false)
+        // Changing step closes the commitment editor, so it can't reappear later.
+        s.copy(step = previous, showErrors = false, editing = null, editorShowErrors = false)
     }
 
     // Next is always enabled. If the current step is invalid, next() stays put
@@ -224,7 +248,7 @@ class CreateArcViewModel(
             CreateArcStep.INTENTION -> CreateArcStep.REVIEW
             CreateArcStep.REVIEW -> CreateArcStep.REVIEW
         }
-        s.copy(step = nextStep, showErrors = false)
+        s.copy(step = nextStep, showErrors = false, editing = null, editorShowErrors = false)
     }
 
     fun begin(onCreated: () -> Unit) {
@@ -256,6 +280,45 @@ class CreateArcViewModel(
             }
         }
     }
+
+    fun startNewCommitment() = _state.update { it.copy(editing = CommitmentDraft(), editorShowErrors = false) }
+
+    // An id that isn't in the list leaves the editor as it was.
+    fun editCommitment(localId: String) = _state.update { s ->
+        val draft = s.commitments.find { it.localId == localId } ?: return@update s
+        s.copy(editing = draft, editorShowErrors = false)
+    }
+
+    // One function for every field in the editor: the screen says how to
+    // change the draft, e.g. updateEditing { it.copy(name = "Water") }.
+    fun updateEditing(change: (CommitmentDraft) -> CommitmentDraft) = _state.update { s ->
+        val draft = s.editing ?: return@update s
+        s.copy(editing = change(draft))
+    }
+
+    fun cancelEditing() = _state.update { it.copy(editing = null, editorShowErrors = false) }
+
+    fun saveEditing() = _state.update { s ->
+        val draft = s.editing ?: return@update s
+        if (draft.error != null) return@update s.copy(editorShowErrors = true)
+        s.copy(commitments = s.commitments.withSaved(draft.cleaned()), editing = null, editorShowErrors = false)
+    }
+
+    fun removeEditing() = _state.update { s ->
+        val id = s.editing?.localId ?: return@update s
+        s.copy(
+            commitments = s.commitments.filterNot { it.localId == id },
+            editing = null,
+            editorShowErrors = false,
+        )
+    }
+
+    // Saves a finished draft in one call, without opening the editor. Same
+    // checks as saveEditing(): an incomplete draft is ignored.
+    fun saveCommitment(draft: CommitmentDraft) = _state.update {
+        if (draft.error != null) return@update it
+        it.copy(commitments = it.commitments.withSaved(draft.cleaned()))
+    }
 }
 
 private fun CommitmentDraft.toNewCommitment(): NewCommitment = NewCommitment(
@@ -274,9 +337,14 @@ private fun CommitmentDraft.toNewCommitment(): NewCommitment = NewCommitment(
 private fun NewCommitment.toDraft(): CommitmentDraft = CommitmentDraft(
     name = name,
     type = type,
-    targetValue = targetValue,
+    targetText = targetValue?.let { formatInputAmount(it) }.orEmpty(),
     unit = unit,
     isRequired = isRequired,
     scheduleType = scheduleType,
     scheduleDays = scheduleDays.orEmpty().split(",").mapNotNull { it.trim().toIntOrNull() }.toSet(),
 )
+
+private fun List<CommitmentDraft>.withSaved(draft: CommitmentDraft): List<CommitmentDraft> {
+    val index = indexOfFirst { it.localId == draft.localId }
+    return if (index >= 0) toMutableList().also { it[index] = draft } else this + draft
+}

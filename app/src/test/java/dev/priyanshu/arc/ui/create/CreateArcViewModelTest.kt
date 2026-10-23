@@ -256,6 +256,153 @@ class CreateArcViewModelTest {
         assertEquals(1, createdCalls)
     }
 
+    // Task 19 — the commitment editor lives in the ViewModel: open a draft,
+    // change it, then save (blocked until it's complete), cancel or remove.
+    @Test
+    fun `starting a new commitment opens an empty draft that isn't in the list`() {
+        viewModel.startNewCommitment()
+        val state = viewModel.state.value
+        assertNotNull(state.editing)
+        assertFalse(state.isEditingExisting)
+        assertFalse(state.editorShowErrors)
+    }
+
+    @Test
+    fun `saving an incomplete draft keeps the editor open and shows errors`() {
+        viewModel.startNewCommitment()
+        viewModel.saveEditing() // no name yet
+        val state = viewModel.state.value
+        assertNotNull(state.editing)
+        assertTrue(state.editorShowErrors)
+        assertTrue(state.commitments.isEmpty())
+    }
+
+    @Test
+    fun `saving a complete draft adds it cleaned and closes the editor`() {
+        viewModel.startNewCommitment()
+        viewModel.updateEditing { it.copy(name = "  Meditate ") }
+        viewModel.saveEditing()
+        val state = viewModel.state.value
+        assertNull(state.editing)
+        assertFalse(state.editorShowErrors)
+        assertEquals(listOf("Meditate"), state.commitments.map { it.name })
+    }
+
+    @Test
+    fun `editing an existing commitment replaces it in place`() {
+        viewModel.saveCommitment(CommitmentDraft(name = "Read"))
+        viewModel.saveCommitment(CommitmentDraft(name = "Gym"))
+        val readId = viewModel.state.value.commitments.first().localId
+
+        viewModel.editCommitment(readId)
+        assertTrue(viewModel.state.value.isEditingExisting)
+        viewModel.updateEditing { it.copy(name = "Read 20 pages") }
+        viewModel.saveEditing()
+
+        assertEquals(listOf("Read 20 pages", "Gym"), viewModel.state.value.commitments.map { it.name })
+    }
+
+    @Test
+    fun `cancelling an edit leaves the list unchanged`() {
+        viewModel.saveCommitment(CommitmentDraft(name = "Read"))
+        viewModel.editCommitment(viewModel.state.value.commitments.single().localId)
+        viewModel.updateEditing { it.copy(name = "Something else") }
+        viewModel.cancelEditing()
+
+        val state = viewModel.state.value
+        assertNull(state.editing)
+        assertEquals(listOf("Read"), state.commitments.map { it.name })
+    }
+
+    @Test
+    fun `removing from the editor deletes the commitment and closes the editor`() {
+        viewModel.saveCommitment(CommitmentDraft(name = "Read"))
+        viewModel.saveCommitment(CommitmentDraft(name = "Gym"))
+        viewModel.editCommitment(viewModel.state.value.commitments.first().localId)
+        viewModel.removeEditing()
+
+        val state = viewModel.state.value
+        assertNull(state.editing)
+        assertEquals(listOf("Gym"), state.commitments.map { it.name })
+    }
+
+    @Test
+    fun `editing an id that isn't in the list leaves the open editor alone`() {
+        viewModel.startNewCommitment()
+        viewModel.updateEditing { it.copy(name = "Water") }
+        viewModel.editCommitment("not-a-real-id")
+        assertEquals("Water", viewModel.state.value.editing?.name)
+    }
+
+    @Test
+    fun `changing step closes the editor`() {
+        viewModel.setName("My Arc")
+        viewModel.next() // -> COMMITMENTS
+        viewModel.startNewCommitment()
+        viewModel.back()
+        assertNull(viewModel.state.value.editing)
+
+        viewModel.next() // -> COMMITMENTS again
+        viewModel.saveCommitment(CommitmentDraft(name = "Meditate"))
+        viewModel.startNewCommitment()
+        viewModel.next() // -> STRICTNESS
+        assertEquals(CreateArcStep.STRICTNESS, viewModel.state.value.step)
+        assertNull(viewModel.state.value.editing)
+    }
+
+    @Test
+    fun `saveCommitment ignores an incomplete draft and cleans a complete one`() {
+        viewModel.saveCommitment(CommitmentDraft(name = "  "))
+        assertTrue(viewModel.state.value.commitments.isEmpty())
+
+        viewModel.saveCommitment(CommitmentDraft(name = " Read ", targetText = "5", unit = "pages"))
+        val saved = viewModel.state.value.commitments.single()
+        assertEquals("Read", saved.name)
+        assertEquals("", saved.targetText) // binary: no target
+        assertNull(saved.unit)
+    }
+
+    // The old dialog read the target back with toInt(), so a 2.5 target
+    // came back as 2 and was saved that way. The draft now holds the text.
+    @Test
+    fun `remix keeps a fractional target`() = runTest {
+        val clock = FakeClock(LocalDateTime.of(today, LocalTime.of(10, 0)))
+        val repository = ArcRepository(
+            database.arcDao(),
+            database.commitmentDao(),
+            database.dayDao(),
+            database.entryDao(),
+            database.milestoneDao(),
+            clock,
+        )
+        val createResult = repository.createArc(
+            name = "Failed Arc",
+            startDate = today.minusDays(30),
+            endDate = today.minusDays(1),
+            strictness = Strictness.STRICT,
+            restTokensPerWeek = 0,
+            backfillDays = 2,
+            dayBoundaryHour = 4,
+            commitments = listOf(
+                NewCommitment(
+                    name = "Run",
+                    type = CommitmentType.DURATION,
+                    targetValue = 2.5,
+                    unit = "km",
+                    isRequired = true,
+                    scheduleType = ScheduleType.DAILY,
+                ),
+            ),
+        )
+        val sourceArcId = (createResult as CreateArcResult.Created).arcId
+
+        val remixViewModel = CreateArcViewModel(repository, clock, remixFromArcId = sourceArcId)
+        val run = remixViewModel.state.first { it.name == "Failed Arc" }.commitments.single()
+
+        assertEquals("2.5", run.targetText)
+        assertEquals(2.5, run.targetValue)
+    }
+
     // docs/tasks/12-lifecycle-milestones.md: remix pre-fills name and
     // commitments from the source arc, but never intention or dates — those
     // start fresh, same as a plain "start an arc".

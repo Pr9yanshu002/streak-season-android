@@ -360,7 +360,7 @@ private fun CommitmentDraft.summary(): String {
         ScheduleType.DAILY -> "daily"
         ScheduleType.WEEKDAYS -> "weekdays " + scheduleDays.sorted().joinToString(",")
     }
-    val target = if (targetValue != null) " · ${targetValue.toInt()} ${unit.orEmpty()}" else ""
+    val target = if (targetText.isNotBlank()) " · $targetText ${unit.orEmpty()}" else ""
     return "$kind · $requiredness · $schedule$target"
 }
 
@@ -372,7 +372,7 @@ private fun CommitmentEditorDialog(
 ) {
     var name by remember { mutableStateOf(initial?.name ?: "") }
     var type by remember { mutableStateOf(initial?.type ?: CommitmentType.BINARY) }
-    var targetText by remember { mutableStateOf(initial?.targetValue?.toInt()?.toString() ?: "") }
+    var targetText by remember { mutableStateOf(initial?.targetText ?: "") }
     var unit by remember { mutableStateOf(initial?.unit ?: "") }
     var isRequired by remember { mutableStateOf(initial?.isRequired ?: true) }
     var scheduleType by remember { mutableStateOf(initial?.scheduleType ?: ScheduleType.DAILY) }
@@ -381,7 +381,7 @@ private fun CommitmentEditorDialog(
     val needsTarget = type == CommitmentType.COUNTER || type == CommitmentType.DURATION
     val targetValue = targetText.toDoubleOrNull()
     val isValid = name.isNotBlank() &&
-        (!needsTarget || (targetValue != null && targetValue > 0 && unit.isNotBlank())) &&
+        (!needsTarget || (targetValue != null && targetValue.isFinite() && targetValue > 0 && unit.isNotBlank())) &&
         (scheduleType == ScheduleType.DAILY || scheduleDays.isNotEmpty())
 
     AlertDialog(
@@ -444,7 +444,7 @@ private fun CommitmentEditorDialog(
                             localId = initial?.localId ?: UUID.randomUUID().toString(),
                             name = name.trim(),
                             type = type,
-                            targetValue = if (needsTarget) targetValue else null,
+                            targetText = if (needsTarget) targetText.trim() else "",
                             unit = if (needsTarget) unit.trim() else null,
                             isRequired = isRequired,
                             scheduleType = scheduleType,
