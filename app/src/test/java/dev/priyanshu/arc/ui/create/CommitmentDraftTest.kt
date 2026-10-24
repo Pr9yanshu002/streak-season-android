@@ -6,6 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.util.Locale
 
 // Task 19 — what stops a commitment draft being saved, and how it's tidied
 // before it goes into the list. Plain data, no ViewModel.
@@ -86,5 +87,39 @@ class CommitmentDraftTest {
     fun `cleaned drops weekdays from a daily schedule`() {
         val cleaned = water.copy(scheduleType = ScheduleType.DAILY, scheduleDays = setOf(1, 2)).cleaned()
         assertEquals(emptySet<Int>(), cleaned.scheduleDays)
+    }
+
+    @Test
+    fun `a target that isn't a number says so`() {
+        assertEquals("Write the target as a number, like 2.5.", water.copy(targetText = "lots").error)
+        assertEquals("Set a target above 0.", water.copy(targetText = "").error)
+        assertEquals("Set a target above 0.", water.copy(targetText = "0").error)
+    }
+
+    @Test
+    fun `a dot is always the decimal mark`() {
+        assertEquals(2.5, parseAmount("2.5", '.')!!, 0.0)
+        assertEquals(2.5, parseAmount(" 2.5 ", ',')!!, 0.0)
+    }
+
+    @Test
+    fun `a comma is the decimal mark only where the device uses one`() {
+        assertEquals(2.5, parseAmount("2,5", ',')!!, 0.0)
+        // On an English phone "3,000" is not quietly read as 3.
+        assertNull(parseAmount("3,000", '.'))
+        assertNull(parseAmount("2,5", '.'))
+    }
+
+    @Test
+    fun `a comma decimal on a comma phone is a valid target`() {
+        val previous = Locale.getDefault()
+        Locale.setDefault(Locale.GERMANY)
+        try {
+            val draft = water.copy(targetText = "2,5")
+            assertEquals(2.5, draft.targetValue!!, 0.0)
+            assertNull(draft.error)
+        } finally {
+            Locale.setDefault(previous)
+        }
     }
 }

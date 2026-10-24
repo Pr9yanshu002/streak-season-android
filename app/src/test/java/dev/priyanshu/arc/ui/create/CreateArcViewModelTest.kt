@@ -350,6 +350,86 @@ class CreateArcViewModelTest {
         assertNull(viewModel.state.value.editing)
     }
 
+    // Piece 6b-2 — the full-screen editor drives these through updateEditing,
+    // the same way the screen does.
+    @Test
+    fun `the shown error follows the draft field by field once errors are on`() {
+        viewModel.startNewCommitment()
+        viewModel.updateEditing { it.copy(type = CommitmentType.COUNTER) }
+        viewModel.saveEditing()
+        assertTrue(viewModel.state.value.editorShowErrors)
+        assertEquals("Give it a name.", viewModel.state.value.editing?.error)
+
+        viewModel.updateEditing { it.copy(name = "Water") }
+        assertEquals("Set a target above 0.", viewModel.state.value.editing?.error)
+        viewModel.updateEditing { it.copy(targetText = "3000") }
+        assertEquals("Add a unit, like ml or min.", viewModel.state.value.editing?.error)
+        viewModel.updateEditing { it.copy(unit = "ml") }
+        assertNull(viewModel.state.value.editing?.error)
+
+        viewModel.saveEditing()
+        val state = viewModel.state.value
+        assertNull(state.editing)
+        assertFalse(state.editorShowErrors)
+        assertEquals("3000", state.commitments.single().targetText)
+    }
+
+    @Test
+    fun `errors from one editor don't carry into the next`() {
+        viewModel.startNewCommitment()
+        viewModel.saveEditing() // blocked, errors on
+        viewModel.cancelEditing()
+        viewModel.startNewCommitment()
+        assertFalse(viewModel.state.value.editorShowErrors)
+    }
+
+    @Test
+    fun `switching kind keeps the typed target until save, and saving as tick-off drops it`() {
+        viewModel.startNewCommitment()
+        viewModel.updateEditing { it.copy(name = "Water", type = CommitmentType.COUNTER, targetText = "3000", unit = "ml") }
+        viewModel.updateEditing { it.copy(type = CommitmentType.BINARY) }
+        viewModel.updateEditing { it.copy(type = CommitmentType.COUNTER) }
+        assertEquals("3000", viewModel.state.value.editing?.targetText)
+        assertEquals("ml", viewModel.state.value.editing?.unit)
+
+        viewModel.updateEditing { it.copy(type = CommitmentType.BINARY) }
+        viewModel.saveEditing()
+        val saved = viewModel.state.value.commitments.single()
+        assertEquals("", saved.targetText)
+        assertNull(saved.unit)
+    }
+
+    @Test
+    fun `day toggles add and remove ISO days, and saving keeps them`() {
+        // Same toggle as the screen's DayPicker onToggle.
+        fun toggle(day: Int) = viewModel.updateEditing { d ->
+            d.copy(scheduleDays = if (day in d.scheduleDays) d.scheduleDays - day else d.scheduleDays + day)
+        }
+        viewModel.startNewCommitment()
+        viewModel.updateEditing { it.copy(name = "Long run", scheduleType = ScheduleType.WEEKDAYS) }
+        assertEquals("Pick at least one day.", viewModel.state.value.editing?.error)
+
+        toggle(6)
+        toggle(7)
+        toggle(6)
+        assertEquals(setOf(7), viewModel.state.value.editing?.scheduleDays)
+
+        viewModel.saveEditing()
+        assertEquals(setOf(7), viewModel.state.value.commitments.single().scheduleDays)
+    }
+
+    @Test
+    fun `days picked then switched back to every day are dropped on save`() {
+        viewModel.startNewCommitment()
+        viewModel.updateEditing { it.copy(name = "Gym", scheduleType = ScheduleType.WEEKDAYS, scheduleDays = setOf(1, 3, 5)) }
+        viewModel.updateEditing { it.copy(scheduleType = ScheduleType.DAILY) }
+        viewModel.saveEditing()
+
+        val saved = viewModel.state.value.commitments.single()
+        assertEquals(ScheduleType.DAILY, saved.scheduleType)
+        assertTrue(saved.scheduleDays.isEmpty())
+    }
+
     @Test
     fun `saveCommitment ignores an incomplete draft and cleans a complete one`() {
         viewModel.saveCommitment(CommitmentDraft(name = "  "))

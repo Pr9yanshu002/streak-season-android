@@ -48,11 +48,17 @@ import dev.priyanshu.arc.ui.components.StreakCard
 import dev.priyanshu.arc.ui.theme.Space
 import dev.priyanshu.arc.ui.theme.StreakTheme
 import java.time.LocalDate
-import java.util.UUID
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.text.input.KeyboardType
+import dev.priyanshu.arc.ui.components.formatAmount
+import dev.priyanshu.arc.ui.today.formatSchedule
+import java.time.DayOfWeek
 
 @Composable
 fun CreateArcRoute(
@@ -80,8 +86,12 @@ fun CreateArcRoute(
             onStartDateChange = viewModel::setStartDate,
             onEndDateChange = viewModel::setEndDate,
             onQuickDuration = viewModel::pickQuickDuration,
-            onSaveCommitment = viewModel::saveCommitment,
-            onRemoveCommitment = viewModel::removeCommitment,
+            onAddCommitment = viewModel::startNewCommitment,
+            onEditCommitment = viewModel::editCommitment,
+            onEditingChange = viewModel::updateEditing,
+            onSaveEditing = viewModel::saveEditing,
+            onCancelEditing = viewModel::cancelEditing,
+            onRemoveEditing = viewModel::removeEditing,
             onStrictnessChange = viewModel::setStrictness,
             onRestTokensChange = viewModel::setRestTokensPerWeek,
             onDayBoundaryHourChange = viewModel::setDayBoundaryHour,
@@ -101,8 +111,12 @@ class CreateArcActions(
     val onStartDateChange: (LocalDate) -> Unit,
     val onEndDateChange: (LocalDate) -> Unit,
     val onQuickDuration: (Int) -> Unit,
-    val onSaveCommitment: (CommitmentDraft) -> Unit,
-    val onRemoveCommitment: (String) -> Unit,
+    val onAddCommitment: () -> Unit,
+    val onEditCommitment: (String) -> Unit,
+    val onEditingChange: ((CommitmentDraft) -> CommitmentDraft) -> Unit,
+    val onSaveEditing: () -> Unit,
+    val onCancelEditing: () -> Unit,
+    val onRemoveEditing: () -> Unit,
     val onStrictnessChange: (Strictness) -> Unit,
     val onRestTokensChange: (Int) -> Unit,
     val onDayBoundaryHourChange: (Int) -> Unit,
@@ -116,6 +130,17 @@ class CreateArcActions(
 
 @Composable
 fun CreateArcScreen(state: CreateArcUiState, actions: CreateArcActions, modifier: Modifier = Modifier) {
+    val editing = state.editing
+    if (editing != null) {
+        CommitmentEditor(
+            draft = editing,
+            isExisting = state.isEditingExisting,
+            error = if (state.editorShowErrors) editing.error else null,
+            actions = actions,
+            modifier = modifier,
+        )
+        return
+    }
     Column(modifier = modifier.fillMaxSize()) {
         StepHeader(
             // Review fills every bar.
@@ -285,74 +310,77 @@ private fun Long.toLocalDateFromUtcMillis(): LocalDate = LocalDate.ofEpochDay(th
 // ---------------------------------------------------------------------------
 // Step 2 — commitments
 // ---------------------------------------------------------------------------
+private const val MAX_COMMITMENTS = 10
+// "Reach 3,000 ml · Every day", "Tick off · Saturdays and Sundays".
+internal fun CommitmentDraft.detailText(): String {
+    val what = when (type) {
+        CommitmentType.BINARY -> "Tick off"
+        CommitmentType.COUNTER -> "Reach ${formatAmount(targetValue ?: 0.0)} ${unit.orEmpty()}".trim()
+        CommitmentType.DURATION -> "Spend ${formatAmount(targetValue ?: 0.0)} ${unit.orEmpty()}".trim()
+        CommitmentType.LOG -> "Record a number"
+    }
+    val days = when (scheduleType) {
+        ScheduleType.DAILY -> "Every day"
+        ScheduleType.WEEKDAYS -> formatSchedule(scheduleDays.map { DayOfWeek.of(it) }.toSet())
+    }
+    return "$what · $days"
+}
+// The line under the day picker. All seven days has no "other days", so it
+// just says so instead of "Every day. On other days it won't show on Today."
+internal fun scheduleHint(days: Set<Int>): String = when (days.size) {
+    0 -> "Pick the days it applies."
+    7 -> "Every day of the week."
+    else -> formatSchedule(days.map { DayOfWeek.of(it) }.toSet()) + ". On other days it won't show on Today."
+}
 
 @Composable
 private fun CommitmentsStep(state: CreateArcUiState, actions: CreateArcActions) {
-    var editingDraft by rememberSaveable { mutableStateOf<String?>(null) } // localId, or "new"
-    var showEditor by remember { mutableStateOf(false) }
-
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        state.commitments.forEach { commitment ->
-            CommitmentRow(
-                commitment = commitment,
-                onEdit = {
-                    editingDraft = commitment.localId
-                    showEditor = true
-                },
-                onRemove = { actions.onRemoveCommitment(commitment.localId) },
+    Column(verticalArrangement = Arrangement.spacedBy(Space.s4)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("Commitments", style = MaterialTheme.typography.titleLarge, modifier = Modifier.alignByBaseline())
+            Text(
+                "${state.commitments.size} of $MAX_COMMITMENTS",
+                style = MaterialTheme.typography.labelLarge,
+                color = StreakTheme.colors.inkMuted,
+                modifier = Modifier.alignByBaseline(),
             )
         }
 
-        if (state.commitments.size < 10) {
-            OutlinedButton(onClick = {
-                editingDraft = null
-                showEditor = true
-            }) { Text("Add commitment") }
+        if (state.commitments.isEmpty()) {
+            Text(
+                "Nothing yet. Add the first thing you'll do each day.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = StreakTheme.colors.inkMuted,
+            )
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(Space.s2)) {
+            state.commitments.forEach { commitment ->
+                CommitmentListCard(
+                    name = commitment.name,
+                    detail = commitment.detailText(),
+                    isRequired = commitment.isRequired,
+                    onClick = { actions.onEditCommitment(commitment.localId) },
+                )
+            }
+        }
+
+        if (state.commitments.size < MAX_COMMITMENTS) {
+            DashedAddButton("Add a commitment", onClick = actions.onAddCommitment)
         } else {
-            Text("Up to 10 commitments per arc.", style = MaterialTheme.typography.bodySmall)
+            Text(
+                "That's the most an arc can hold.",
+                style = MaterialTheme.typography.bodySmall,
+                color = StreakTheme.colors.inkMuted,
+            )
         }
 
-        state.shown(state.step2Error)?.let {
-            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-        }
+        state.shown(state.step2Error)?.let { FieldError(it) }
         state.duplicateCommitmentNameWarning?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall)
-        }
-    }
-
-    if (showEditor) {
-        val initial = editingDraft?.let { id -> state.commitments.find { it.localId == id } }
-        CommitmentEditorDialog(
-            initial = initial,
-            onSave = { draft ->
-                actions.onSaveCommitment(draft)
-                showEditor = false
-            },
-            onDismiss = { showEditor = false },
-        )
-    }
-}
-
-@Composable
-private fun CommitmentRow(commitment: CommitmentDraft, onEdit: () -> Unit, onRemove: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(12.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column {
-                Text(commitment.name, style = MaterialTheme.typography.titleMedium)
-                Text(commitment.summary(), style = MaterialTheme.typography.bodySmall)
-            }
-            Row {
-                TextButton(onClick = onEdit) { Text("Edit") }
-                TextButton(onClick = onRemove) { Text("Remove") }
-            }
+            Text(it, style = MaterialTheme.typography.bodySmall, color = StreakTheme.colors.inkMuted)
         }
     }
 }
-
 private fun CommitmentDraft.summary(): String {
     val kind = type.name.lowercase()
     val requiredness = if (isRequired) "required" else "bonus"
@@ -364,102 +392,146 @@ private fun CommitmentDraft.summary(): String {
     return "$kind · $requiredness · $schedule$target"
 }
 
+// ---------------------------------------------------------------------------
+// Commitment editor — full screen, shown while state.editing != null
+// ---------------------------------------------------------------------------
+
+// The words for each kind, shown on the editor's cards (and on list rows in 6c).
+private class KindText(val type: CommitmentType, val title: String, val description: String)
+
+private val KINDS = listOf(
+    KindText(CommitmentType.BINARY, "Tick off", "Done or not done"),
+    KindText(CommitmentType.COUNTER, "Reach a count", "Like 3,000 ml of water"),
+    KindText(CommitmentType.DURATION, "Spend time", "Minutes towards a target"),
+    KindText(CommitmentType.LOG, "Record a number", "Like your weight. Logging it is enough."),
+)
+
 @Composable
-private fun CommitmentEditorDialog(
-    initial: CommitmentDraft?,
-    onSave: (CommitmentDraft) -> Unit,
-    onDismiss: () -> Unit,
+private fun CommitmentEditor(
+    draft: CommitmentDraft,
+    isExisting: Boolean,
+    error: String?,
+    actions: CreateArcActions,
+    modifier: Modifier = Modifier,
 ) {
-    var name by remember { mutableStateOf(initial?.name ?: "") }
-    var type by remember { mutableStateOf(initial?.type ?: CommitmentType.BINARY) }
-    var targetText by remember { mutableStateOf(initial?.targetText ?: "") }
-    var unit by remember { mutableStateOf(initial?.unit ?: "") }
-    var isRequired by remember { mutableStateOf(initial?.isRequired ?: true) }
-    var scheduleType by remember { mutableStateOf(initial?.scheduleType ?: ScheduleType.DAILY) }
-    var scheduleDays by remember { mutableStateOf(initial?.scheduleDays ?: emptySet()) }
+    // The phone's back gesture closes the editor, like ×, instead of leaving the whole flow.
+    BackHandler(onBack = actions.onCancelEditing)
+    val change = actions.onEditingChange
 
-    val needsTarget = type == CommitmentType.COUNTER || type == CommitmentType.DURATION
-    val targetValue = targetText.toDoubleOrNull()
-    val isValid = name.isNotBlank() &&
-        (!needsTarget || (targetValue != null && targetValue.isFinite() && targetValue > 0 && unit.isNotBlank())) &&
-        (scheduleType == ScheduleType.DAILY || scheduleDays.isNotEmpty())
+    Column(modifier.fillMaxSize()) {
+        EditorTopBar(
+            title = if (isExisting) "Edit commitment" else "New commitment",
+            onClose = actions.onCancelEditing,
+        )
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (initial == null) "Add commitment" else "Edit commitment") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, singleLine = true)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = Space.s6, vertical = Space.s4),
+            verticalArrangement = Arrangement.spacedBy(Space.s6),
+        ) {
+            StreakTextField(
+                value = draft.name,
+                onValueChange = { text -> change { it.copy(name = text) } },
+                label = "Name",
+                placeholder = "Water",
+            )
 
-                Text("Type", style = MaterialTheme.typography.labelLarge)
-                CommitmentType.entries.forEach { option ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected = type == option, onClick = { type = option })
-                        Text(option.name.lowercase())
-                    }
-                }
+            Column(verticalArrangement = Arrangement.spacedBy(Space.s2)) {
+                FieldLabel("What kind")
+                KindGrid(selected = draft.type, onSelect = { type -> change { it.copy(type = type) } })
+            }
 
-                if (needsTarget) {
-                    OutlinedTextField(value = targetText, onValueChange = { targetText = it }, label = { Text("Target") }, singleLine = true)
-                    OutlinedTextField(value = unit, onValueChange = { unit = it }, label = { Text("Unit") }, singleLine = true)
-                }
-
-                Text("Required or bonus", style = MaterialTheme.typography.labelLarge)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = isRequired, onClick = { isRequired = true })
-                    Text("Required")
-                    Spacer(Modifier.width(16.dp))
-                    RadioButton(selected = !isRequired, onClick = { isRequired = false })
-                    Text("Bonus")
-                }
-
-                Text("Schedule", style = MaterialTheme.typography.labelLarge)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = scheduleType == ScheduleType.DAILY, onClick = { scheduleType = ScheduleType.DAILY })
-                    Text("Every day")
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = scheduleType == ScheduleType.WEEKDAYS, onClick = { scheduleType = ScheduleType.WEEKDAYS })
-                    Text("Specific weekdays")
-                }
-                if (scheduleType == ScheduleType.WEEKDAYS) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        WEEKDAY_LABELS.forEach { (iso, label) ->
-                            FilterChip(
-                                selected = iso in scheduleDays,
-                                onClick = { scheduleDays = if (iso in scheduleDays) scheduleDays - iso else scheduleDays + iso },
-                                label = { Text(label) },
-                            )
-                        }
-                    }
+            if (draft.needsTarget) {
+                val isTime = draft.type == CommitmentType.DURATION
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    StreakTextField(
+                        value = draft.targetText,
+                        onValueChange = { text -> change { it.copy(targetText = text) } },
+                        label = "Target each day",
+                        placeholder = if (isTime) "30" else "3000",
+                        keyboardType = KeyboardType.Decimal,
+                        modifier = Modifier.weight(1f),
+                    )
+                    StreakTextField(
+                        value = draft.unit.orEmpty(),
+                        onValueChange = { text -> change { it.copy(unit = text) } },
+                        label = "Unit",
+                        placeholder = if (isTime) "min" else "ml",
+                        modifier = Modifier.width(110.dp),
+                    )
                 }
             }
-        },
-        confirmButton = {
-            TextButton(
-                enabled = isValid,
-                onClick = {
-                    onSave(
-                        CommitmentDraft(
-                            localId = initial?.localId ?: UUID.randomUUID().toString(),
-                            name = name.trim(),
-                            type = type,
-                            targetText = if (needsTarget) targetText.trim() else "",
-                            unit = if (needsTarget) unit.trim() else null,
-                            isRequired = isRequired,
-                            scheduleType = scheduleType,
-                            scheduleDays = if (scheduleType == ScheduleType.WEEKDAYS) scheduleDays else emptySet(),
-                        )
+
+            Column(verticalArrangement = Arrangement.spacedBy(Space.s2)) {
+                FieldLabel("Does it decide the day?")
+                SegmentedControl(
+                    options = listOf(true to "Required", false to "Bonus"),
+                    selected = draft.isRequired,
+                    onSelect = { required -> change { it.copy(isRequired = required) } },
+                )
+                Text(
+                    if (draft.isRequired) "The day only counts once this is done." else "Tracked, but never breaks a day.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = StreakTheme.colors.inkMuted,
+                )
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(Space.s2)) {
+                FieldLabel("When")
+                SegmentedControl(
+                    options = listOf(ScheduleType.DAILY to "Every day", ScheduleType.WEEKDAYS to "Some days"),
+                    selected = draft.scheduleType,
+                    onSelect = { type -> change { it.copy(scheduleType = type) } },
+                )
+                if (draft.scheduleType == ScheduleType.WEEKDAYS) {
+                    DayPicker(
+                        selectedDays = draft.scheduleDays,
+                        onToggle = { day ->
+                            change { d -> d.copy(scheduleDays = if (day in d.scheduleDays) d.scheduleDays - day else d.scheduleDays + day) }
+                        },
                     )
-                },
-            ) { Text("Save") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
+                    Text(
+                        scheduleHint(draft.scheduleDays),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = StreakTheme.colors.inkMuted,
+                    )
+                }
+            }
+
+            error?.let { FieldError(it) }
+        }
+
+        StepBottomBar(
+            primaryText = if (isExisting) "Save changes" else "Add commitment",
+            onPrimary = actions.onSaveEditing,
+            onBack = if (isExisting) actions.onRemoveEditing else null,
+            backText = "Remove",
+        )
+    }
 }
 
-private val WEEKDAY_LABELS = listOf(1 to "Mon", 2 to "Tue", 3 to "Wed", 4 to "Thu", 5 to "Fri", 6 to "Sat", 7 to "Sun")
-
+@Composable
+private fun KindGrid(selected: CommitmentType, onSelect: (CommitmentType) -> Unit) {
+    Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(Space.s2)) {
+        KINDS.chunked(2).forEach { pair ->
+            // IntrinsicSize.Min + fillMaxHeight: both cards in a row grow to the
+            // taller one's height, so a two-line description doesn't make them uneven.
+            Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
+                pair.forEach { kind ->
+                    OptionCard(
+                        title = kind.title,
+                        description = kind.description,
+                        selected = kind.type == selected,
+                        onClick = { onSelect(kind.type) },
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                    )
+                }
+            }
+        }
+    }
+}
 // Errors stay hidden until the user taps Next on an invalid step.
 private fun CreateArcUiState.shown(error:String?) : String? = if(showErrors)  error else null
 

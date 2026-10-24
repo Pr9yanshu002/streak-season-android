@@ -14,6 +14,7 @@ import dev.priyanshu.arc.domain.rules.hasAtLeastOneRequiredCommitment
 import dev.priyanshu.arc.domain.rules.isValidArcName
 import dev.priyanshu.arc.domain.rules.isValidStartDate
 import dev.priyanshu.arc.ui.components.formatInputAmount
+import java.text.DecimalFormatSymbols
 import java.time.LocalDate
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,7 +50,9 @@ data class CommitmentDraft(
     val scheduleType: ScheduleType = ScheduleType.DAILY,
     val scheduleDays: Set<Int> = emptySet(),
 ) {
-    val targetValue: Double? get() = targetText.trim().toDoubleOrNull()
+    // The device's own decimal mark is accepted, so "2,5" works on a phone
+    // set to a language that writes it that way. See parseAmount.
+    val targetValue: Double? get() = parseAmount(targetText, DecimalFormatSymbols.getInstance().decimalSeparator)
 
     val needsTarget: Boolean get() = type == CommitmentType.COUNTER || type == CommitmentType.DURATION
 
@@ -57,6 +60,8 @@ data class CommitmentDraft(
     val error: String?
         get() = when {
             name.isBlank() -> "Give it a name."
+            needsTarget && targetText.isNotBlank() && targetValue == null ->
+                "Write the target as a number, like 2.5."
             // isFinite: toDoubleOrNull() also accepts "NaN" and "Infinity".
             needsTarget && targetValue.let { it == null || !it.isFinite() || it <= 0.0 } ->
                 "Set a target above 0."
@@ -319,6 +324,15 @@ class CreateArcViewModel(
         if (draft.error != null) return@update it
         it.copy(commitments = it.commitments.withSaved(draft.cleaned()))
     }
+}
+
+// A typed amount as a number. "2.5" always works. A comma is read as the
+// decimal mark only when the device uses one, so on an English phone "3,000"
+// is rejected rather than quietly read as 3.
+internal fun parseAmount(text: String, decimalSeparator: Char): Double? {
+    val trimmed = text.trim()
+    val withDot = if (decimalSeparator == ',') trimmed.replace(',', '.') else trimmed
+    return withDot.toDoubleOrNull()
 }
 
 private fun CommitmentDraft.toNewCommitment(): NewCommitment = NewCommitment(
