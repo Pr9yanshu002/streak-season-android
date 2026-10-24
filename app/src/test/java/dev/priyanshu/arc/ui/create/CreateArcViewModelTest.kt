@@ -430,6 +430,58 @@ class CreateArcViewModelTest {
         assertTrue(saved.scheduleDays.isEmpty())
     }
 
+    // Piece 7 — the strictness step.
+    @Test
+    fun `rest days a week stay between 0 and 7`() {
+        viewModel.setRestTokensPerWeek(-1)
+        assertEquals(0, viewModel.state.value.restTokensPerWeek)
+        viewModel.setRestTokensPerWeek(8)
+        assertEquals(7, viewModel.state.value.restTokensPerWeek)
+        viewModel.setRestTokensPerWeek(3)
+        assertEquals(3, viewModel.state.value.restTokensPerWeek)
+    }
+
+    @Test
+    fun `switching strictness away and back keeps the chosen rest days`() {
+        viewModel.setStrictness(Strictness.STANDARD)
+        viewModel.setRestTokensPerWeek(2)
+        viewModel.setStrictness(Strictness.CHILL)
+        viewModel.setStrictness(Strictness.STANDARD)
+        assertEquals(2, viewModel.state.value.restTokensPerWeek)
+    }
+
+    @Test
+    fun `begin stores the rest days for a standard arc`() = runTest {
+        assertEquals(2, createdRestTokens(Strictness.STANDARD, restTokens = 2))
+    }
+
+    @Test
+    fun `begin stores 0 rest days for a strict arc (R6)`() = runTest {
+        assertEquals(0, createdRestTokens(Strictness.STRICT, restTokens = 2))
+    }
+
+    @Test
+    fun `begin stores 0 rest days for a chill arc (R6)`() = runTest {
+        assertEquals(0, createdRestTokens(Strictness.CHILL, restTokens = 2))
+    }
+
+    // Fills in a valid arc with the given strictness, begins it, and reads
+    // back what was written to the arcs table.
+    private suspend fun createdRestTokens(strictness: Strictness, restTokens: Int): Int {
+        viewModel.setName("My Arc")
+        viewModel.saveCommitment(CommitmentDraft(name = "Gym"))
+        viewModel.setStrictness(Strictness.STANDARD)
+        viewModel.setRestTokensPerWeek(restTokens)
+        viewModel.setStrictness(strictness)
+
+        val created = CompletableDeferred<Unit>()
+        viewModel.begin(onCreated = { created.complete(Unit) })
+        created.await()
+
+        val arcId = requireNotNull(database.arcDao().getActiveArcId())
+        return requireNotNull(database.arcDao().observeById(arcId).first()).restTokensPerWeek
+    }
+
     @Test
     fun `saveCommitment ignores an incomplete draft and cleans a complete one`() {
         viewModel.saveCommitment(CommitmentDraft(name = "  "))
@@ -577,7 +629,9 @@ class CreateArcViewModelTest {
         val newArc = requireNotNull(database.arcDao().observeById(newArcId).first())
         assertEquals(sourceId, newArc.remixedFromArcId)
         assertEquals("strict", newArc.strictness)
-        assertEquals(3, newArc.restTokensPerWeek)
+        // R6: no rest tokens outside standard, so a strict arc stores 0 even
+        // though the pre-fill showed the source's 3.
+        assertEquals(0, newArc.restTokensPerWeek)
         assertEquals(5, newArc.backfillDays)
         assertEquals(6, newArc.dayBoundaryHour)
     }

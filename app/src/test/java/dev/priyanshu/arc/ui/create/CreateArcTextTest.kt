@@ -2,6 +2,7 @@ package dev.priyanshu.arc.ui.create
 
 import dev.priyanshu.arc.domain.model.CommitmentType
 import dev.priyanshu.arc.domain.model.ScheduleType
+import dev.priyanshu.arc.domain.model.Strictness
 import java.util.Locale
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -58,5 +59,32 @@ class CreateArcTextTest {
         val gym = CommitmentDraft(name = "Gym", scheduleType = ScheduleType.WEEKDAYS)
         assertEquals("Tick off · Mon, Wed, Fri", gym.copy(scheduleDays = setOf(1, 3, 5)).detailText())
         assertEquals("Tick off · Saturdays and Sundays", gym.copy(scheduleDays = setOf(6, 7)).detailText())
+    }
+
+    // Piece 7 — the strict card explains R7 sealing with the arc's own backfill.
+    @Test
+    fun `strict description with no backfill says days lock as soon as they end`() {
+        assertEquals(
+            "One missed day ends the arc. Days lock as soon as they end.",
+            Strictness.STRICT.description(backfillDays = 0),
+        )
+    }
+
+    @Test
+    fun `strict description counts the backfill days`() {
+        assertEquals(
+            "One missed day ends the arc. You get 1 day to fill a day in before it locks.",
+            Strictness.STRICT.description(backfillDays = 1),
+        )
+        assertEquals(
+            "One missed day ends the arc. You get 2 days to fill a day in before it locks.",
+            Strictness.STRICT.description(backfillDays = 2),
+        )
+    }
+
+    @Test
+    fun `standard and chill descriptions don't depend on backfill`() {
+        assertEquals(Strictness.STANDARD.description(0), Strictness.STANDARD.description(5))
+        assertEquals(Strictness.CHILL.description(0), Strictness.CHILL.description(5))
     }
 }

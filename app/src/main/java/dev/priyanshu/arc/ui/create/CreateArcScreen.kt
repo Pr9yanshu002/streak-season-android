@@ -1,11 +1,14 @@
 package dev.priyanshu.arc.ui.create
 
-import androidx.compose.foundation.isSystemInDarkTheme
+import android.text.format.DateFormat
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -14,19 +17,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -38,27 +34,27 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import dev.priyanshu.arc.domain.model.CommitmentType
+import dev.priyanshu.arc.domain.model.DayState
 import dev.priyanshu.arc.domain.model.ScheduleType
 import dev.priyanshu.arc.domain.model.Strictness
+import dev.priyanshu.arc.ui.components.DayDisc
 import dev.priyanshu.arc.ui.components.StreakCard
+import dev.priyanshu.arc.ui.components.formatAmount
 import dev.priyanshu.arc.ui.theme.Space
 import dev.priyanshu.arc.ui.theme.StreakTheme
-import java.time.LocalDate
+import dev.priyanshu.arc.ui.today.formatSchedule
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.ui.text.input.KeyboardType
-import dev.priyanshu.arc.ui.components.formatAmount
-import dev.priyanshu.arc.ui.today.formatSchedule
-import java.time.DayOfWeek
 
 @Composable
 fun CreateArcRoute(
@@ -154,7 +150,7 @@ fun CreateArcScreen(state: CreateArcUiState, actions: CreateArcActions, modifier
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = Space.s6, vertical = Space.s4),
             verticalArrangement = Arrangement.spacedBy(Space.s6),
-        ){
+        ) {
             val text = state.step.text()
             StepIntro(
                 eyebrow = state.step.number?.let { "Step $it of $NUMBERED_STEP_COUNT" },
@@ -275,7 +271,7 @@ private fun NameAndDatesStep(state: CreateArcUiState, actions: CreateArcActions)
 @Composable
 private fun DatePickerField(date: LocalDate, minDate: LocalDate?, onDateChange: (LocalDate) -> Unit,text: String, isError: Boolean) {
     var showDialog by remember { mutableStateOf(false) }
-    DateField(text = text, onClick = {showDialog = true}, isError = isError)
+    DateField(text = text, onClick = { showDialog = true }, isError = isError)
 
     if (showDialog) {
         val pickerState = rememberDatePickerState(
@@ -310,7 +306,9 @@ private fun Long.toLocalDateFromUtcMillis(): LocalDate = LocalDate.ofEpochDay(th
 // ---------------------------------------------------------------------------
 // Step 2 — commitments
 // ---------------------------------------------------------------------------
+
 private const val MAX_COMMITMENTS = 10
+
 // "Reach 3,000 ml · Every day", "Tick off · Saturdays and Sundays".
 internal fun CommitmentDraft.detailText(): String {
     val what = when (type) {
@@ -325,6 +323,34 @@ internal fun CommitmentDraft.detailText(): String {
     }
     return "$what · $days"
 }
+
+private fun Strictness.title(): String = when (this) {
+    Strictness.STRICT -> "Strict"
+    Strictness.STANDARD -> "Standard"
+    Strictness.CHILL -> "Chill"
+}
+
+// From rules.md: strict fails on a sealed miss (R9); standard and chill never
+// fail; rest days exist only in standard (R6).
+internal fun Strictness.description(backfillDays: Int): String = when (this) {
+    Strictness.STRICT ->
+        if (backfillDays == 0) "One missed day ends the arc. Days lock as soon as they end."
+        else "One missed day ends the arc. You get ${daysText(backfillDays)} to fill a day in before it locks."
+    Strictness.STANDARD ->
+        "A missed day breaks your streak, but the arc carries on. Rest days when you need them."
+    Strictness.CHILL ->
+        "The arc never ends early and there are no rest days to manage. Misses only lower your %."
+}
+
+private fun daysText(n: Int): String = if (n == 1) "1 day" else "$n days"
+
+// 4 → "4:00 AM", or "04:00" when the phone is set to 24-hour time.
+@Composable
+private fun hourText(hour: Int): String {
+    val pattern = if (DateFormat.is24HourFormat(LocalContext.current)) "HH:mm" else "h:mm a"
+    return LocalTime.of(hour, 0).format(DateTimeFormatter.ofPattern(pattern, Locale.getDefault()))
+}
+
 // The line under the day picker. All seven days has no "other days", so it
 // just says so instead of "Every day. On other days it won't show on Today."
 internal fun scheduleHint(days: Set<Int>): String = when (days.size) {
@@ -549,70 +575,75 @@ private val QUICK_LENGTHS = listOf(30, 60, 75, 90)
 
 @Composable
 private fun StrictnessStep(state: CreateArcUiState, actions: CreateArcActions) {
-    var showAdvanced by remember { mutableStateOf(false) }
+    var showAdvanced by rememberSaveable {
+        mutableStateOf(
+            state.dayBoundaryHour != DEFAULT_DAY_BOUNDARY_HOUR || state.backfillDays != DEFAULT_BACKFILL_DAYS,
+        )
+    }
 
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text("Strictness", style = MaterialTheme.typography.labelLarge)
-        StrictnessOption(
-            strictness = Strictness.STRICT,
-            description = "A sealed miss archives the arc (R9). No safety net.",
-            selected = state.strictness == Strictness.STRICT,
-            onSelect = actions.onStrictnessChange,
-        )
-        StrictnessOption(
-            strictness = Strictness.STANDARD,
-            description = "Rest tokens let you skip some days without breaking your streak (R6).",
-            selected = state.strictness == Strictness.STANDARD,
-            onSelect = actions.onStrictnessChange,
-        )
-        StrictnessOption(
-            strictness = Strictness.CHILL,
-            description = "Never fails. Finishes with whatever percentage you earn.",
-            selected = state.strictness == Strictness.CHILL,
-            onSelect = actions.onStrictnessChange,
-        )
+    Column(verticalArrangement = Arrangement.spacedBy(Space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(Space.s2)) {
+            Strictness.entries.forEach { level ->
+                OptionCard(
+                    title = level.title(),
+                    description = level.description(state.backfillDays),
+                    selected = level == state.strictness,
+                    onClick = { actions.onStrictnessChange(level) },
+                    showRadio = true,
+                )
+            }
+        }
 
         if (state.strictness == Strictness.STANDARD) {
-            Column {
-                Text("Rest tokens per week", style = MaterialTheme.typography.labelLarge)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedButton(onClick = { actions.onRestTokensChange(state.restTokensPerWeek - 1) }) { Text("−") }
-                    Text("${state.restTokensPerWeek}", modifier = Modifier.padding(horizontal = 12.dp))
-                    OutlinedButton(onClick = { actions.onRestTokensChange(state.restTokensPerWeek + 1) }) { Text("+") }
-                }
+            SectionCard {
+                StepperRow(
+                    title = "Rest days",
+                    subtitle = if (state.restTokensPerWeek == 0) {
+                        "None · a missed day always breaks your streak"
+                    } else {
+                        "${state.restTokensPerWeek} a week · your streak carries on"
+                    },
+                    onDecrease = { actions.onRestTokensChange(state.restTokensPerWeek - 1) },
+                    onIncrease = { actions.onRestTokensChange(state.restTokensPerWeek + 1) },
+                    decreaseLabel = "One fewer rest day a week",
+                    increaseLabel = "One more rest day a week",
+                    leading = { DayDisc(state = DayState.REST, isToday = false) },
+                )
             }
         }
 
-        HorizontalDivider()
-
-        TextButton(onClick = { showAdvanced = !showAdvanced }) {
-            Text(if (showAdvanced) "Hide advanced" else "Advanced")
+        ExpandableSection(
+            title = "Advanced",
+            expanded = showAdvanced,
+            onToggle = { showAdvanced = !showAdvanced },
+        ) {
+            StepperRow(
+                title = "Day starts at ${hourText(state.dayBoundaryHour)}",
+                subtitle = if (state.dayBoundaryHour == 0) {
+                    "The day changes at midnight."
+                } else {
+                    "Late nights count as the day before."
+                },
+                onDecrease = { actions.onDayBoundaryHourChange(state.dayBoundaryHour - 1) },
+                onIncrease = { actions.onDayBoundaryHourChange(state.dayBoundaryHour + 1) },
+                decreaseLabel = "Start the day an hour earlier",
+                increaseLabel = "Start the day an hour later",
+            )
+            HorizontalDivider(color = StreakTheme.colors.line)
+            StepperRow(
+                title = if (state.backfillDays == 0) {
+                    "Only today can be filled in"
+                } else {
+                    "Fill in up to ${daysText(state.backfillDays)} back"
+                },
+                subtitle = "After that, a day locks.",
+                onDecrease = { actions.onBackfillDaysChange(state.backfillDays - 1) },
+                onIncrease = { actions.onBackfillDaysChange(state.backfillDays + 1) },
+                decreaseLabel = "One fewer day to fill in",
+                increaseLabel = "One more day to fill in",
+            )
         }
-        if (showAdvanced) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Column {
-                    Text("Day boundary hour (0–23, default 4)", style = MaterialTheme.typography.labelLarge)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedButton(onClick = { actions.onDayBoundaryHourChange(state.dayBoundaryHour - 1) }) { Text("−") }
-                        Text("${state.dayBoundaryHour}", modifier = Modifier.padding(horizontal = 12.dp))
-                        OutlinedButton(onClick = { actions.onDayBoundaryHourChange(state.dayBoundaryHour + 1) }) { Text("+") }
-                    }
-                }
-                Column {
-                    Text("Backfill days (default 2)", style = MaterialTheme.typography.labelLarge)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedButton(onClick = { actions.onBackfillDaysChange(state.backfillDays - 1) }) { Text("−") }
-                        Text("${state.backfillDays}", modifier = Modifier.padding(horizontal = 12.dp))
-                        OutlinedButton(onClick = { actions.onBackfillDaysChange(state.backfillDays + 1) }) { Text("+") }
-                    }
-                }
-            }
-        }
-
-        state.shown(state.strictnessError)?.let {
-            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-        }
-
+        state.shown(state.strictnessError)?.let { FieldError(it) }
     }
 }
 
@@ -621,29 +652,13 @@ private fun StrictnessStep(state: CreateArcUiState, actions: CreateArcActions) {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun IntentionStep(state: CreateArcUiState, actions: CreateArcActions){
+private fun IntentionStep(state: CreateArcUiState, actions: CreateArcActions) {
     OutlinedTextField(
         value = state.intention,
         onValueChange = actions.onIntentionChange,
         label = { Text("Intention (optional)") },
         modifier = Modifier.fillMaxWidth(),
     )
-}
-
-@Composable
-private fun StrictnessOption(
-    strictness: Strictness,
-    description: String,
-    selected: Boolean,
-    onSelect: (Strictness) -> Unit,
-) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        RadioButton(selected = selected, onClick = { onSelect(strictness) })
-        Column {
-            Text(strictness.name.lowercase().replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.titleSmall)
-            Text(description, style = MaterialTheme.typography.bodySmall)
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------

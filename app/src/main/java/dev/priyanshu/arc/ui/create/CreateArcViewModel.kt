@@ -14,15 +14,15 @@ import dev.priyanshu.arc.domain.rules.hasAtLeastOneRequiredCommitment
 import dev.priyanshu.arc.domain.rules.isValidArcName
 import dev.priyanshu.arc.domain.rules.isValidStartDate
 import dev.priyanshu.arc.ui.components.formatInputAmount
-import java.text.DecimalFormatSymbols
-import java.time.LocalDate
-import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.text.DecimalFormatSymbols
+import java.time.LocalDate
 import java.time.temporal.ChronoUnit
+import java.util.UUID
 
 enum class CreateArcStep { NAME_AND_DATES, COMMITMENTS, STRICTNESS, INTENTION, REVIEW }
 
@@ -80,6 +80,11 @@ data class CommitmentDraft(
     )
 }
 
+// schema.sql defaults for a new arc. The strictness step opens Advanced when
+// either differs, so a remix with its own values doesn't hide them.
+const val DEFAULT_DAY_BOUNDARY_HOUR = 4
+const val DEFAULT_BACKFILL_DAYS = 2
+
 // Everything the create flow holds in memory across its five steps. Nothing
 // here is written to the database until Begin (R15: "draft is not used in
 // v0 — the creation flow holds state in memory and writes the arc only when
@@ -93,8 +98,8 @@ data class CreateArcUiState(
     val commitments: List<CommitmentDraft> = emptyList(),
     val strictness: Strictness = Strictness.STANDARD,
     val restTokensPerWeek: Int = 1,
-    val dayBoundaryHour: Int = 4,
-    val backfillDays: Int = 2,
+    val dayBoundaryHour: Int = DEFAULT_DAY_BOUNDARY_HOUR,
+    val backfillDays: Int = DEFAULT_BACKFILL_DAYS,
     val intention: String = "",
     val activeArcExistsError: Boolean = false,
     val isSubmitting: Boolean = false,
@@ -149,7 +154,7 @@ data class CreateArcUiState(
     val strictnessError: String?
         get() = startDateError?.let { "$it Go back to step 1 to fix it." }
 
-    val blockingError: String? get() = when(step){
+    val blockingError: String? get() = when (step) {
         CreateArcStep.NAME_AND_DATES -> step1Error
         CreateArcStep.COMMITMENTS -> step2Error
         CreateArcStep.STRICTNESS -> strictnessError
@@ -198,7 +203,7 @@ class CreateArcViewModel(
                         name = source.name,
                         commitments = source.commitments.map { c -> c.toDraft() },
                         strictness = source.strictness,
-                        restTokensPerWeek = source.restTokensPerWeek,
+                        restTokensPerWeek = source.restTokensPerWeek.coerceIn(0, 7),
                         backfillDays = source.backfillDays,
                         dayBoundaryHour = source.dayBoundaryHour,
                     )
@@ -220,7 +225,7 @@ class CreateArcViewModel(
 
     fun setStrictness(strictness: Strictness) = _state.update { it.copy(strictness = strictness) }
 
-    fun setRestTokensPerWeek(count: Int) = _state.update { it.copy(restTokensPerWeek = count.coerceAtLeast(0)) }
+    fun setRestTokensPerWeek(count: Int) = _state.update { it.copy(restTokensPerWeek = count.coerceIn(0, 7)) }
 
     fun setDayBoundaryHour(hour: Int) = _state.update { it.copy(dayBoundaryHour = hour.coerceIn(0, 23)) }
 
@@ -269,7 +274,7 @@ class CreateArcViewModel(
                 startDate = s.startDate,
                 endDate = s.endDate,
                 strictness = s.strictness,
-                restTokensPerWeek = s.restTokensPerWeek,
+                restTokensPerWeek = if (s.strictness == Strictness.STANDARD) s.restTokensPerWeek else 0,
                 backfillDays = s.backfillDays,
                 dayBoundaryHour = s.dayBoundaryHour,
                 commitments = s.commitments.map { it.toNewCommitment() },

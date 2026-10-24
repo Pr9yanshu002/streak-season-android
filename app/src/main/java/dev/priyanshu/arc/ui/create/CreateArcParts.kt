@@ -1,16 +1,14 @@
 package dev.priyanshu.arc.ui.create
 
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -18,7 +16,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,11 +26,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -38,51 +45,47 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import dev.priyanshu.arc.R
 import dev.priyanshu.arc.ui.components.LargeButton
 import dev.priyanshu.arc.ui.components.PreviewFrame
+import dev.priyanshu.arc.ui.components.RoundIconButton
+import dev.priyanshu.arc.ui.components.StrokeGlyph
 import dev.priyanshu.arc.ui.components.TouchTarget
 import dev.priyanshu.arc.ui.theme.Space
 import dev.priyanshu.arc.ui.theme.StreakTheme
-import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardType
 import java.time.DayOfWeek
 import java.util.Locale
 import java.time.format.TextStyle as DayNameStyle
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.text.style.TextOverflow
+
 @Composable
 fun StepHeader(
     currentStep: Int,
     totalSteps: Int,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
-){
+) {
     Row(
         modifier = modifier
             .fillMaxWidth()
             .padding(start = Space.s6, end = Space.s2, top = Space.s4),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ){
+    ) {
         Row(
             modifier = Modifier
                 .weight(1f)
                 // TalkBack reads one sentence instead of four silent bars.
                 .clearAndSetSemantics { contentDescription = "Step $currentStep of $totalSteps" },
             horizontalArrangement = Arrangement.spacedBy(Space.s1),
-        ){
-            repeat(totalSteps) {
-                index -> Box(
+        ) {
+            repeat(totalSteps) { index ->
+                Box(
                     Modifier
                         .weight(1f)
                         .height(3.dp)
@@ -98,7 +101,7 @@ fun StepHeader(
 @Composable
 private fun CloseButton(
     onClick: () -> Unit,
-){
+) {
     IconButton(onClick = onClick, modifier = Modifier.size(TouchTarget)) {
         Icon(
             painter = painterResource(R.drawable.ic_close),
@@ -130,17 +133,17 @@ fun StepBottomBar(
     onBack: (() -> Unit)?,
     modifier: Modifier = Modifier,
     backText: String = "Back",
-){
+) {
     Column(
         modifier.fillMaxWidth()
-    ){
+    ) {
         HorizontalDivider()
         Row(
             modifier = Modifier.fillMaxWidth().padding(start = Space.s6, end = Space.s6, top = Space.s4, bottom = Space.s6),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (onBack!=null){
-                LargeButton(text = backText, onClick = onBack, filled = false, modifier = Modifier.width(112.dp),)
+            if (onBack != null) {
+                LargeButton(text = backText, onClick = onBack, filled = false, modifier = Modifier.width(112.dp))
             }
             LargeButton(
                 text = primaryText,
@@ -517,6 +520,97 @@ fun DashedAddButton(text: String, onClick: () -> Unit, modifier: Modifier = Modi
         )
         Spacer(Modifier.width(Space.s2))
         Text(text, style = MaterialTheme.typography.labelLarge, color = colors.evergreen)
+    }
+}
+
+// A plain card on frost: surface, hairline border, rounded. No padding of its
+// own, so rows inside can run edge to edge with dividers between them.
+@Composable
+fun SectionCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    val shape = MaterialTheme.shapes.medium
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(StreakTheme.colors.surface)
+            .border(1.dp, StreakTheme.colors.line, shape),
+        content = content,
+    )
+}
+
+// A setting you change one step at a time: title, a line explaining it, and
+// − / + buttons. leading is an optional mark on the left (the rest-day disc).
+@Composable
+fun StepperRow(
+    title: String,
+    subtitle: String,
+    onDecrease: () -> Unit,
+    onIncrease: () -> Unit,
+    decreaseLabel: String,
+    increaseLabel: String,
+    modifier: Modifier = Modifier,
+    leading: (@Composable () -> Unit)? = null,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(Space.s4),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        leading?.invoke()
+        Column(
+            Modifier
+                .weight(1f)
+                .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+        ) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = StreakTheme.colors.inkMuted)
+        }
+        RoundIconButton(glyph = StrokeGlyph.MINUS, filled = false, contentDescription = decreaseLabel, onClick = onDecrease)
+        RoundIconButton(glyph = StrokeGlyph.PLUS, filled = true, contentDescription = increaseLabel, onClick = onIncrease)
+    }
+}
+
+@Composable
+fun ExpandableSection(
+    title: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    SectionCard(modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .clickable(
+                    onClickLabel = if (expanded) "Collapse" else "Expand",
+                    role = Role.Button,
+                    onClick = onToggle,
+                )
+                .semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" }
+                .padding(horizontal = Space.s4),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                painter = painterResource(R.drawable.ic_expand_more),
+                contentDescription = null,
+                tint = StreakTheme.colors.ink,
+                modifier = Modifier.rotate(if (expanded) 180f else 0f),
+            )
+        }
+        if (expanded) {
+            HorizontalDivider(color = StreakTheme.colors.line)
+            content()
+        }
     }
 }
 
