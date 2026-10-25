@@ -66,7 +66,7 @@ class CreateArcTextTest {
     @Test
     fun `strict description with no backfill says days lock as soon as they end`() {
         assertEquals(
-            "One missed day ends the arc. Days lock as soon as they end.",
+            "A day you don't finish ends the arc. Days lock as soon as they end.",
             Strictness.STRICT.description(backfillDays = 0),
         )
     }
@@ -74,11 +74,11 @@ class CreateArcTextTest {
     @Test
     fun `strict description counts the backfill days`() {
         assertEquals(
-            "One missed day ends the arc. You get 1 day to fill a day in before it locks.",
+            "A day you don't finish ends the arc. You get 1 day to fill a day in before it locks.",
             Strictness.STRICT.description(backfillDays = 1),
         )
         assertEquals(
-            "One missed day ends the arc. You get 2 days to fill a day in before it locks.",
+            "A day you don't finish ends the arc. You get 2 days to fill a day in before it locks.",
             Strictness.STRICT.description(backfillDays = 2),
         )
     }

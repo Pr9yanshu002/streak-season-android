@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -143,7 +144,11 @@ fun CreateArcScreen(state: CreateArcUiState, actions: CreateArcActions, modifier
         )
         return
     }
-    Column(modifier = modifier.fillMaxSize()) {
+    // The phone's back gesture goes one step back, or leaves the flow from
+    // step 1, instead of closing the app and losing the draft. While the
+    // editor is open this isn't composed, so the editor's own handler wins.
+    BackHandler(onBack = if (state.step == CreateArcStep.NAME_AND_DATES) actions.onCancel else actions.onBack)
+    Column(modifier = modifier.fillMaxSize().imePadding()) {
         StepHeader(
             // Review fills every bar.
             currentStep = state.step.number ?: NUMBERED_STEP_COUNT,
@@ -216,7 +221,11 @@ private fun NameAndDatesStep(state: CreateArcUiState, actions: CreateArcActions)
                 FieldError(startError)
             } else {
                 Text(
-                    "You can start up to ${state.backfillDays} days back, or any day ahead.",
+                    if (state.backfillDays == 0) {
+                        "You can start today or any day ahead."
+                    } else {
+                        "You can start up to ${daysText(state.backfillDays)} back, or any day ahead."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = StreakTheme.colors.inkMuted,
                 )
@@ -336,19 +345,17 @@ private fun Strictness.title(): String = when (this) {
     Strictness.CHILL -> "Chill"
 }
 
-// From rules.md: strict fails on a sealed miss (R9); standard and chill never
-// fail; rest days exist only in standard (R6).
+// From rules.md: a sealed partial or missed day fails a strict arc (R9);
+// standard and chill never fail; rest days exist only in standard (R6).
 internal fun Strictness.description(backfillDays: Int): String = when (this) {
     Strictness.STRICT ->
-        if (backfillDays == 0) "One missed day ends the arc. Days lock as soon as they end."
-        else "One missed day ends the arc. You get ${daysText(backfillDays)} to fill a day in before it locks."
+        if (backfillDays == 0) "A day you don't finish ends the arc. Days lock as soon as they end."
+        else "A day you don't finish ends the arc. You get ${daysText(backfillDays)} to fill a day in before it locks."
     Strictness.STANDARD ->
         "A missed day breaks your streak, but the arc carries on. Rest days when you need them."
     Strictness.CHILL ->
         "The arc never ends early and there are no rest days to manage. Misses only lower your %."
 }
-
-private fun daysText(n: Int): String = if (n == 1) "1 day" else "$n days"
 
 // 4 → "4:00 AM", or "04:00" when the phone is set to 24-hour time.
 @Composable
@@ -450,7 +457,7 @@ private fun CommitmentEditor(
     BackHandler(onBack = actions.onCancelEditing)
     val change = actions.onEditingChange
 
-    Column(modifier.fillMaxSize()) {
+    Column(modifier.fillMaxSize().imePadding()) {
         EditorTopBar(
             title = if (isExisting) "Edit commitment" else "New commitment",
             onClose = actions.onCancelEditing,
@@ -567,12 +574,6 @@ private fun KindGrid(selected: CommitmentType, onSelect: (CommitmentType) -> Uni
 // Errors stay hidden until the user taps Next on an invalid step.
 private fun CreateArcUiState.shown(error:String?) : String? = if(showErrors)  error else null
 
-private val SHORT_DATE = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())
-private val FULL_DATE = DateTimeFormatter.ofPattern("EEE d MMM yyyy", Locale.getDefault())
-
-private fun LocalDate.shortText(): String = format(SHORT_DATE)
-private fun LocalDate.fullText(): String = format(FULL_DATE)
-
 private val QUICK_LENGTHS = listOf(30, 60, 75, 90)
 
 // ---------------------------------------------------------------------------
@@ -664,6 +665,7 @@ private fun IntentionStep(state: CreateArcUiState, actions: CreateArcActions) {
         onValueChange = actions.onIntentionChange,
         label = "You wrote",
         helper = "Skip it if nothing comes to mind.",
+        placeholder = "I'm doing this because…",
     )
 }
 
@@ -723,7 +725,7 @@ private fun ReviewStep(state: CreateArcUiState, actions:CreateArcActions) {
         // R15: reachable only if an arc became active while this flow was open.
         if (state.activeArcExistsError) {
             Text(
-                "You already have an active arc. Finish it before starting a new one.",
+                "You already have an active arc. You can start a new one once it ends.",
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier
                     .fillMaxWidth()

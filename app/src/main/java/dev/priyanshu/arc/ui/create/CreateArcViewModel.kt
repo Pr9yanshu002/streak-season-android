@@ -116,11 +116,11 @@ data class CreateArcUiState(
         get() = if (!isValidArcName(name)) "Name can't be empty." else null
 
     val startDateError: String?
-        get() = if (!isValidStartDate(startDate, today, backfillDays)) {
-            "Start date can't be before $earliestAllowedStartDate — that's as far back as the " +
-                "$backfillDays-day backfill window reaches."
-        } else {
-            null
+        get() = when {
+            isValidStartDate(startDate, today, backfillDays) -> null
+            backfillDays == 0 -> "The earliest start is today."
+            else -> "The earliest start is ${earliestAllowedStartDate.shortText()}, " +
+                "${daysText(backfillDays)} back. Pick that or a later day."
         }
 
     val endDateError: String?
@@ -137,7 +137,7 @@ data class CreateArcUiState(
         get() = when {
             commitments.isEmpty() -> "Add at least one commitment."
             !hasRequiredCommitment ->
-                "At least one commitment must be required — an all-bonus arc can never show progress (R8)."
+                "Make at least one commitment required. Required ones decide whether a day counts."
             else -> null
         }
 
@@ -330,7 +330,10 @@ class CreateArcViewModel(
         it.copy(commitments = it.commitments.withSaved(draft.cleaned()))
     }
 
-    fun goToStep(step: CreateArcStep) = _state.update { it.copy(step = step, showErrors = false) }
+    // Ignored while Begin is in flight, so Edit can't leave Review mid-submit.
+    fun goToStep(step: CreateArcStep) = _state.update {
+        if (it.isSubmitting) it else it.copy(step = step, showErrors = false)
+    }
 }
 
 // A typed amount as a number. "2.5" always works. A comma is read as the
