@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Recap — toughest week</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&amp;family=Literata:ital,opsz,wght@0,7..72,400;1,7..72,400&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#1E5B3F}a:hover{color:#13201A}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; background: {{c.frost}}; color: {{c.ink}}; font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif">
+  <div style="display: flex; align-items: center; gap: 12px; padding: 16px 12px 0 24px">
+    <div style="flex: 1; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px">
+      <sc-for list="{{segs}}" as="s" hint-placeholder-count="8">
+        <div style="height: 3px; border-radius: 999px; {{s.style}}"></div>
+      </sc-for>
+    </div>
+    <button aria-label="Close recap" style="width: 44px; height: 44px; border: 0; padding: 0; background: transparent; color: {{c.ink}}; display: flex; align-items: center; justify-content: center; cursor: pointer">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+    </button>
+  </div>
+
+  <div style="display: flex; flex-direction: column; padding: 48px 24px 0 24px">
+    <div style="font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.02em; color: {{c.muted}}">Your toughest week</div>
+    <div style="font-size: 56px; line-height: 56px; font-weight: 700; letter-spacing: -0.03em; margin-top: 16px">22–28 Dec</div>
+    <div style="font-size: 28px; line-height: 34px; font-weight: 650; letter-spacing: -0.01em; margin-top: 16px">3 of 6 days</div>
+    <div style="font-size: 16px; line-height: 24px; color: {{c.muted}}; margin-top: 8px">Thursday was a rest day, so the week counts six days, not seven.</div>
+  </div>
+
+  <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 24px; padding: 0 24px 56px 24px">
+    <div role="img" aria-label="Monday complete, Tuesday missed, Wednesday complete, Thursday rest, Friday missed, Saturday complete, Sunday partly done." style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; padding: 20px 16px; border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.line}}">
+      <sc-for list="{{week}}" as="d" hint-placeholder-count="7">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 10px">
+          <div style="width: 36px; height: 36px; border-radius: 999px; box-sizing: border-box; {{d.style}}"></div>
+          <div style="font-size: 12px; line-height: 16px; color: {{c.muted}}">{{d.day}}</div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; line-height: 16px; color: {{c.muted}}">
+      <sc-for list="{{legend}}" as="l" hint-placeholder-count="4">
+        <div style="display: flex; align-items: center; gap: 6px">
+          <div style="width: 14px; height: 14px; border-radius: 999px; box-sizing: border-box; {{l.style}}"></div>
+          <div>{{l.label}}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const P = {
+      light: { frost: '#F3F5F0', surface: '#FFFFFF', sunken: '#E7ECE4', line: '#CBD3C6', lineStrong: '#7A877E', ink: '#13201A', muted: '#526158', ever: '#1E5B3F', everSoft: '#D8E9DE', onEver: '#FFFFFF', larch: '#8F5C08', larchSoft: '#F6E7C8', missed: '#A2482D', rest: '#3F6683' },
+      dark:  { frost: '#0F1612', surface: '#17201B', sunken: '#1F2A24', line: '#34433A', lineStrong: '#6E7E74', ink: '#E6EDE7', muted: '#9DAAA1', ever: '#74C597', everSoft: '#1C3628', onEver: '#0F1612', larch: '#E6AA4E', larchSoft: '#3B2C13', missed: '#E39176', rest: '#93B7D0' }
+    };
+    const c = (this.props.dark ?? false) ? P.dark : P.light;
+    const disc = (s) => {
+      if (s === 'C') return 'background: ' + c.ever;
+      if (s === 'P') return 'background: linear-gradient(to top, ' + c.larch + ' 50%, ' + c.larchSoft + ' 50%)';
+      if (s === 'M') return 'background: transparent; box-shadow: inset 0 0 0 2px ' + c.missed;
+      if (s === 'R') return 'background: radial-gradient(circle, ' + c.rest + ' 0 26%, ' + c.sunken + ' 28%)';
+      return 'background: ' + c.sunken;
+    };
+    const names = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    const week = 'CMCRMCP'.split('').map((s, i) => ({ day: names[i], style: disc(s) }));
+    const legend = [
+      { label: 'Complete', style: disc('C') },
+      { label: 'Partly done', style: disc('P') },
+      { label: 'Missed', style: disc('M') },
+      { label: 'Rest', style: disc('R') }
+    ];
+    const current = 3;
+    const segs = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => ({
+      style: 'background: ' + (i <= current ? c.ink : c.line)
+    }));
+    return { c, segs, week, legend };
+  }
+}
+</script>
+</body>
+</html>
