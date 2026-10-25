@@ -8,11 +8,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -23,7 +23,7 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -39,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import dev.priyanshu.arc.domain.model.CommitmentType
@@ -143,7 +144,11 @@ fun CreateArcScreen(state: CreateArcUiState, actions: CreateArcActions, modifier
         )
         return
     }
-    Column(modifier = modifier.fillMaxSize()) {
+    // The phone's back gesture goes one step back, or leaves the flow from
+    // step 1, instead of closing the app and losing the draft. While the
+    // editor is open this isn't composed, so the editor's own handler wins.
+    BackHandler(onBack = if (state.step == CreateArcStep.NAME_AND_DATES) actions.onCancel else actions.onBack)
+    Column(modifier = modifier.fillMaxSize().imePadding()) {
         StepHeader(
             // Review fills every bar.
             currentStep = state.step.number ?: NUMBERED_STEP_COUNT,
@@ -216,7 +221,11 @@ private fun NameAndDatesStep(state: CreateArcUiState, actions: CreateArcActions)
                 FieldError(startError)
             } else {
                 Text(
-                    "You can start up to ${state.backfillDays} days back, or any day ahead.",
+                    if (state.backfillDays == 0) {
+                        "You can start today or any day ahead."
+                    } else {
+                        "You can start up to ${daysText(state.backfillDays)} back, or any day ahead."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = StreakTheme.colors.inkMuted,
                 )
@@ -275,7 +284,13 @@ private fun NameAndDatesStep(state: CreateArcUiState, actions: CreateArcActions)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DatePickerField(date: LocalDate, minDate: LocalDate?, onDateChange: (LocalDate) -> Unit,text: String, isError: Boolean) {
+private fun DatePickerField(
+    date: LocalDate,
+    minDate: LocalDate?,
+    onDateChange: (LocalDate) -> Unit,
+    text: String,
+    isError: Boolean,
+) {
     var showDialog by remember { mutableStateOf(false) }
     DateField(text = text, onClick = { showDialog = true }, isError = isError)
 
@@ -336,19 +351,17 @@ private fun Strictness.title(): String = when (this) {
     Strictness.CHILL -> "Chill"
 }
 
-// From rules.md: strict fails on a sealed miss (R9); standard and chill never
-// fail; rest days exist only in standard (R6).
+// From rules.md: a sealed partial or missed day fails a strict arc (R9);
+// standard and chill never fail; rest days exist only in standard (R6).
 internal fun Strictness.description(backfillDays: Int): String = when (this) {
     Strictness.STRICT ->
-        if (backfillDays == 0) "One missed day ends the arc. Days lock as soon as they end."
-        else "One missed day ends the arc. You get ${daysText(backfillDays)} to fill a day in before it locks."
+        if (backfillDays == 0) "A day you don't finish ends the arc. Days lock as soon as they end."
+        else "A day you don't finish ends the arc. You get ${daysText(backfillDays)} to fill a day in before it locks."
     Strictness.STANDARD ->
         "A missed day breaks your streak, but the arc carries on. Rest days when you need them."
     Strictness.CHILL ->
         "The arc never ends early and there are no rest days to manage. Misses only lower your %."
 }
-
-private fun daysText(n: Int): String = if (n == 1) "1 day" else "$n days"
 
 // 4 → "4:00 AM", or "04:00" when the phone is set to 24-hour time.
 @Composable
@@ -413,22 +426,12 @@ private fun CommitmentsStep(state: CreateArcUiState, actions: CreateArcActions) 
         }
     }
 }
-private fun CommitmentDraft.summary(): String {
-    val kind = type.name.lowercase()
-    val requiredness = if (isRequired) "required" else "bonus"
-    val schedule = when (scheduleType) {
-        ScheduleType.DAILY -> "daily"
-        ScheduleType.WEEKDAYS -> "weekdays " + scheduleDays.sorted().joinToString(",")
-    }
-    val target = if (targetText.isNotBlank()) " · $targetText ${unit.orEmpty()}" else ""
-    return "$kind · $requiredness · $schedule$target"
-}
 
 // ---------------------------------------------------------------------------
 // Commitment editor — full screen, shown while state.editing != null
 // ---------------------------------------------------------------------------
 
-// The words for each kind, shown on the editor's cards (and on list rows in 6c).
+// The words for each kind, shown on the editor's cards.
 private class KindText(val type: CommitmentType, val title: String, val description: String)
 
 private val KINDS = listOf(
@@ -450,7 +453,7 @@ private fun CommitmentEditor(
     BackHandler(onBack = actions.onCancelEditing)
     val change = actions.onEditingChange
 
-    Column(modifier.fillMaxSize()) {
+    Column(modifier.fillMaxSize().imePadding()) {
         EditorTopBar(
             title = if (isExisting) "Edit commitment" else "New commitment",
             onClose = actions.onCancelEditing,
@@ -564,14 +567,9 @@ private fun KindGrid(selected: CommitmentType, onSelect: (CommitmentType) -> Uni
         }
     }
 }
+
 // Errors stay hidden until the user taps Next on an invalid step.
-private fun CreateArcUiState.shown(error:String?) : String? = if(showErrors)  error else null
-
-private val SHORT_DATE = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())
-private val FULL_DATE = DateTimeFormatter.ofPattern("EEE d MMM yyyy", Locale.getDefault())
-
-private fun LocalDate.shortText(): String = format(SHORT_DATE)
-private fun LocalDate.fullText(): String = format(FULL_DATE)
+private fun CreateArcUiState.shown(error: String?): String? = if (showErrors) error else null
 
 private val QUICK_LENGTHS = listOf(30, 60, 75, 90)
 
@@ -664,6 +662,7 @@ private fun IntentionStep(state: CreateArcUiState, actions: CreateArcActions) {
         onValueChange = actions.onIntentionChange,
         label = "You wrote",
         helper = "Skip it if nothing comes to mind.",
+        placeholder = "I'm doing this because…",
     )
 }
 
@@ -672,7 +671,7 @@ private fun IntentionStep(state: CreateArcUiState, actions: CreateArcActions) {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun ReviewStep(state: CreateArcUiState, actions:CreateArcActions) {
+private fun ReviewStep(state: CreateArcUiState, actions: CreateArcActions) {
     Column(verticalArrangement = Arrangement.spacedBy(Space.s4)) {
         ReviewCard(title = state.name.trim(), onEdit = { actions.onGoToStep(CreateArcStep.NAME_AND_DATES) }) {
             Text("${state.lengthInDays} days · ${state.startsText()}", style = MaterialTheme.typography.bodyLarge)
@@ -684,8 +683,10 @@ private fun ReviewStep(state: CreateArcUiState, actions:CreateArcActions) {
         }
 
         val count = state.commitments.size
-        ReviewCard(title = if (count==1) "1 commitment" else "$count commitments", onEdit = {actions.onGoToStep(
-            CreateArcStep.COMMITMENTS)}) {
+        ReviewCard(
+            title = if (count == 1) "1 commitment" else "$count commitments",
+            onEdit = { actions.onGoToStep(CreateArcStep.COMMITMENTS) },
+        ) {
             Column(Modifier.padding(top = Space.s2), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 state.commitments.forEach { commitment ->
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
@@ -703,7 +704,7 @@ private fun ReviewStep(state: CreateArcUiState, actions:CreateArcActions) {
             }
         }
 
-        ReviewCard(title = state.strictness.title(), onEdit = {actions.onGoToStep(CreateArcStep.STRICTNESS)}) {
+        ReviewCard(title = state.strictness.title(), onEdit = { actions.onGoToStep(CreateArcStep.STRICTNESS) }) {
             if (state.strictness == Strictness.STANDARD) {
                 Text(state.restDaysText(), style = MaterialTheme.typography.bodyLarge)
             }
@@ -714,16 +715,20 @@ private fun ReviewStep(state: CreateArcUiState, actions:CreateArcActions) {
             )
         }
 
-        if (state.intention.isNotBlank()){
-            ReviewCard(title = "You wrote", onEdit = {actions.onGoToStep(CreateArcStep.INTENTION)}, titleStyle = MaterialTheme.typography.labelLarge,) {
-                Text(state.intention.trim(),style = StreakTheme.type.voice)
+        if (state.intention.isNotBlank()) {
+            ReviewCard(
+                title = "You wrote",
+                onEdit = { actions.onGoToStep(CreateArcStep.INTENTION) },
+                titleStyle = MaterialTheme.typography.labelLarge,
+            ) {
+                Text(state.intention.trim(), style = StreakTheme.type.voice)
             }
         }
 
         // R15: reachable only if an arc became active while this flow was open.
         if (state.activeArcExistsError) {
             Text(
-                "You already have an active arc. Finish it before starting a new one.",
+                "You already have an active arc. You can start a new one once it ends.",
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -753,7 +758,7 @@ private fun CreateArcStep.text(): StepText = when (this) {
     CreateArcStep.REVIEW -> StepText("Ready to begin?")
 }
 
-internal fun CreateArcUiState.startsText() : String = when {
+internal fun CreateArcUiState.startsText(): String = when {
     startDate == today -> "starts today"
     startDate.isAfter(today) -> "starts ${startDate.shortText()}"
     else -> "began ${startDate.shortText()}"
@@ -763,8 +768,62 @@ internal fun CreateArcUiState.startsText() : String = when {
 internal fun CreateArcUiState.backfillText(): String =
     if (backfillDays == 0) "only today can be filled in" else "fill in up to ${daysText(backfillDays)} back"
 
-internal fun CreateArcUiState.restDaysText() : String = when (restTokensPerWeek) {
+internal fun CreateArcUiState.restDaysText(): String = when (restTokensPerWeek) {
     0 -> "No rest days"
     1 -> "1 rest day a week"
     else -> "$restTokensPerWeek rest days a week"
 }
+
+// Previews only: every action does nothing.
+private val PreviewActions = CreateArcActions(
+    onNameChange = {},
+    onStartDateChange = {},
+    onEndDateChange = {},
+    onQuickDuration = {},
+    onAddCommitment = {},
+    onEditCommitment = {},
+    onEditingChange = {},
+    onSaveEditing = {},
+    onCancelEditing = {},
+    onRemoveEditing = {},
+    onStrictnessChange = {},
+    onRestTokensChange = {},
+    onDayBoundaryHourChange = {},
+    onBackfillDaysChange = {},
+    onIntentionChange = {},
+    onBack = {},
+    onNext = {},
+    onBegin = {},
+    onCancel = {},
+    onGoToStep = {},
+)
+
+@PreviewLightDark
+@Composable
+private fun ReviewStepPreview() {
+    val today = LocalDate.of(2026, 10, 22)
+    val state = CreateArcUiState(
+        step = CreateArcStep.REVIEW,
+        today = today,
+        name = "Winter Arc",
+        startDate = today,
+        endDate = today.plusDays(59),
+        commitments = listOf(
+            CommitmentDraft(name = "Water", type = CommitmentType.COUNTER, targetText = "3000", unit = "ml"),
+            CommitmentDraft(
+                name = "Read",
+                type = CommitmentType.DURATION,
+                targetText = "20",
+                unit = "min",
+                isRequired = false,
+            ),
+        ),
+        intention = "I want my evenings back.",
+    )
+    StreakTheme {
+        Surface(color = MaterialTheme.colorScheme.background) {
+            CreateArcScreen(state = state, actions = PreviewActions)
+        }
+    }
+}
+

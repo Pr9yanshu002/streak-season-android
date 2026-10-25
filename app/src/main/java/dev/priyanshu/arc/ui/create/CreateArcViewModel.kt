@@ -116,11 +116,11 @@ data class CreateArcUiState(
         get() = if (!isValidArcName(name)) "Name can't be empty." else null
 
     val startDateError: String?
-        get() = if (!isValidStartDate(startDate, today, backfillDays)) {
-            "Start date can't be before $earliestAllowedStartDate — that's as far back as the " +
-                "$backfillDays-day backfill window reaches."
-        } else {
-            null
+        get() = when {
+            isValidStartDate(startDate, today, backfillDays) -> null
+            backfillDays == 0 -> "The earliest start is today."
+            else -> "The earliest start is ${earliestAllowedStartDate.shortText()}, " +
+                "${daysText(backfillDays)} back. Pick that or a later day."
         }
 
     val endDateError: String?
@@ -137,7 +137,7 @@ data class CreateArcUiState(
         get() = when {
             commitments.isEmpty() -> "Add at least one commitment."
             !hasRequiredCommitment ->
-                "At least one commitment must be required — an all-bonus arc can never show progress (R8)."
+                "Make at least one commitment required. Required ones decide whether a day counts."
             else -> null
         }
 
@@ -149,6 +149,7 @@ data class CreateArcUiState(
                 .any { it.value > 1 }
             return if (duplicated) "Two or more commitments share a name. That's allowed, but worth checking." else null
         }
+
     // Changing backfill_days on the strictness step can make an already-chosen
     // start date too early (R16). Same isValidStartDate check step 1 uses.
     val strictnessError: String?
@@ -158,7 +159,7 @@ data class CreateArcUiState(
         CreateArcStep.NAME_AND_DATES -> step1Error
         CreateArcStep.COMMITMENTS -> step2Error
         CreateArcStep.STRICTNESS -> strictnessError
-        CreateArcStep.REVIEW , CreateArcStep.INTENTION -> null
+        CreateArcStep.INTENTION, CreateArcStep.REVIEW -> null
     }
 
     // Whether the open editor holds a commitment already in the list (Edit),
@@ -219,9 +220,6 @@ class CreateArcViewModel(
     fun setEndDate(date: LocalDate) = _state.update { it.copy(endDate = date) }
 
     fun pickQuickDuration(days: Int) = _state.update { it.copy(endDate = it.startDate.plusDays((days - 1).toLong())) }
-
-    fun removeCommitment(localId: String) =
-        _state.update { it.copy(commitments = it.commitments.filterNot { c -> c.localId == localId }) }
 
     fun setStrictness(strictness: Strictness) = _state.update { it.copy(strictness = strictness) }
 
@@ -324,13 +322,17 @@ class CreateArcViewModel(
     }
 
     // Saves a finished draft in one call, without opening the editor. Same
-    // checks as saveEditing(): an incomplete draft is ignored.
+    // checks as saveEditing(): an incomplete draft is ignored. The screen goes
+    // through the editor; this is the shortcut tests use to fill the list.
     fun saveCommitment(draft: CommitmentDraft) = _state.update {
         if (draft.error != null) return@update it
         it.copy(commitments = it.commitments.withSaved(draft.cleaned()))
     }
 
-    fun goToStep(step: CreateArcStep) = _state.update { it.copy(step = step, showErrors = false) }
+    // Ignored while Begin is in flight, so Edit can't leave Review mid-submit.
+    fun goToStep(step: CreateArcStep) = _state.update {
+        if (it.isSubmitting) it else it.copy(step = step, showErrors = false)
+    }
 }
 
 // A typed amount as a number. "2.5" always works. A comma is read as the

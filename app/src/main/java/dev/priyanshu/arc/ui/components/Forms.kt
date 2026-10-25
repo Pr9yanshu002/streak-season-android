@@ -46,6 +46,7 @@ fun ReflectionField(
     label: String,
     helper: String,
     modifier: Modifier = Modifier,
+    placeholder: String = "How is it going?",
 ) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val voice = StreakTheme.type.voice
@@ -73,7 +74,7 @@ fun ReflectionField(
                         .border(1.5.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.small)
                         .padding(Space.s4),
                 ) {
-                    if (value.isEmpty()) Text("How is it going?", style = voice, color = muted)
+                    if (value.isEmpty()) Text(placeholder, style = voice, color = muted)
                     innerTextField()
                 }
             },
