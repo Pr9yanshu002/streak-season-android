@@ -9,10 +9,16 @@ import dev.priyanshu.arc.data.NewCommitment
 import dev.priyanshu.arc.domain.model.CommitmentType
 import dev.priyanshu.arc.domain.model.ScheduleType
 import dev.priyanshu.arc.domain.model.Strictness
+import dev.priyanshu.arc.domain.rules.CommitmentProblem
+import dev.priyanshu.arc.domain.rules.MAX_REST_TOKENS_PER_WEEK
+import dev.priyanshu.arc.domain.rules.commitmentProblems
 import dev.priyanshu.arc.domain.rules.earliestAllowedStartDate
+import dev.priyanshu.arc.domain.rules.effectiveToday
 import dev.priyanshu.arc.domain.rules.hasAtLeastOneRequiredCommitment
 import dev.priyanshu.arc.domain.rules.isValidArcName
 import dev.priyanshu.arc.domain.rules.isValidStartDate
+import dev.priyanshu.arc.domain.rules.restTokensToStore
+import dev.priyanshu.arc.domain.rules.totalDays
 import dev.priyanshu.arc.ui.components.formatInputAmount
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,7 +27,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.text.DecimalFormatSymbols
 import java.time.LocalDate
-import java.time.temporal.ChronoUnit
+import java.time.LocalDateTime
 import java.util.UUID
 
 enum class CreateArcStep { NAME_AND_DATES, COMMITMENTS, STRICTNESS, INTENTION, REVIEW }
@@ -56,18 +62,22 @@ data class CommitmentDraft(
 
     val needsTarget: Boolean get() = type == CommitmentType.COUNTER || type == CommitmentType.DURATION
 
-    // What stops this draft being saved, or null if it's ready.
+    // What stops this draft being saved, or null if it's ready: the first
+    // R20 problem, in words. Text that isn't a number is the one check left
+    // here — it's about reading what was typed, not about the rule.
     val error: String?
-        get() = when {
-            name.isBlank() -> "Give it a name."
-            needsTarget && targetText.isNotBlank() && targetValue == null ->
-                "Write the target as a number, like 2.5."
-            // isFinite: toDoubleOrNull() also accepts "NaN" and "Infinity".
-            needsTarget && targetValue.let { it == null || !it.isFinite() || it <= 0.0 } ->
-                "Set a target above 0."
-            needsTarget && unit.isNullOrBlank() -> "Add a unit, like ml or min."
-            scheduleType == ScheduleType.WEEKDAYS && scheduleDays.isEmpty() -> "Pick at least one day."
-            else -> null
+        get() = when (commitmentProblems(name, type, targetValue, unit, scheduleType, scheduleDays).firstOrNull()) {
+            null -> null
+            CommitmentProblem.BLANK_NAME -> "Give it a name."
+            CommitmentProblem.TARGET_NOT_POSITIVE ->
+                if (targetText.isNotBlank() && targetValue == null) {
+                    "Write the target as a number, like 2.5."
+                } else {
+                    "Set a target above 0."
+                }
+            CommitmentProblem.MISSING_UNIT -> "Add a unit, like ml or min."
+            // The day picker only offers 1-7, so an out-of-range day can't be typed.
+            CommitmentProblem.NO_DAYS, CommitmentProblem.DAY_OUT_OF_RANGE -> "Pick at least one day."
         }
 
     // The tidy version that goes into the list: trimmed, and with fields that
@@ -91,7 +101,7 @@ const val DEFAULT_BACKFILL_DAYS = 2
 // the user confirms it").
 data class CreateArcUiState(
     val step: CreateArcStep = CreateArcStep.NAME_AND_DATES,
-    val today: LocalDate,
+    val now: LocalDateTime,
     val name: String = "",
     val startDate: LocalDate,
     val endDate: LocalDate,
@@ -107,6 +117,10 @@ data class CreateArcUiState(
     val editing: CommitmentDraft? = null,
     val editorShowErrors: Boolean = false,
 ) {
+    // R1, with the boundary hour this arc will have (R16). Changing the
+    // boundary on the strictness step can move it by a day.
+    val today: LocalDate get() = effectiveToday(now, dayBoundaryHour)
+
     // R16, called, not re-derived — see earliestAllowedStartDate/isValidStartDate.
     val earliestAllowedStartDate: LocalDate get() = earliestAllowedStartDate(today, backfillDays)
 
@@ -167,7 +181,8 @@ data class CreateArcUiState(
     val isEditingExisting: Boolean
         get() = editing?.let { draft -> commitments.any { it.localId == draft.localId } } ?: false
 
-    val lengthInDays: Int get() = ChronoUnit.DAYS.between(startDate, endDate).toInt() + 1
+    // R2's inclusive day count.
+    val lengthInDays: Int get() = totalDays(startDate, endDate)
 }
 
 class CreateArcViewModel(
@@ -179,13 +194,10 @@ class CreateArcViewModel(
     val state: StateFlow<CreateArcUiState>
 
     init {
-        // R1's effectiveToday (the day-boundary-hour transform) is internal
-        // to :domain and not reachable here — see this task's report. Using
-        // the plain calendar date is off by at most one day, only in the
-        // few hours before the boundary hour.
-        val today = clock.now().toLocalDate()
+        val now = clock.now()
+        val today = effectiveToday(now, DEFAULT_DAY_BOUNDARY_HOUR)
         _state = MutableStateFlow(
-            CreateArcUiState(today = today, startDate = today, endDate = today.plusDays(59))
+            CreateArcUiState(now = now, startDate = today, endDate = today.plusDays(59))
         )
         state = _state.asStateFlow()
 
@@ -204,7 +216,7 @@ class CreateArcViewModel(
                         name = source.name,
                         commitments = source.commitments.map { c -> c.toDraft() },
                         strictness = source.strictness,
-                        restTokensPerWeek = source.restTokensPerWeek.coerceIn(0, 7),
+                        restTokensPerWeek = source.restTokensPerWeek.coerceIn(0, MAX_REST_TOKENS_PER_WEEK),
                         backfillDays = source.backfillDays,
                         dayBoundaryHour = source.dayBoundaryHour,
                     )
@@ -223,7 +235,9 @@ class CreateArcViewModel(
 
     fun setStrictness(strictness: Strictness) = _state.update { it.copy(strictness = strictness) }
 
-    fun setRestTokensPerWeek(count: Int) = _state.update { it.copy(restTokensPerWeek = count.coerceIn(0, 7)) }
+    // R21: 0 to MAX_REST_TOKENS_PER_WEEK.
+    fun setRestTokensPerWeek(count: Int) =
+        _state.update { it.copy(restTokensPerWeek = count.coerceIn(0, MAX_REST_TOKENS_PER_WEEK)) }
 
     fun setDayBoundaryHour(hour: Int) = _state.update { it.copy(dayBoundaryHour = hour.coerceIn(0, 23)) }
 
@@ -272,7 +286,7 @@ class CreateArcViewModel(
                 startDate = s.startDate,
                 endDate = s.endDate,
                 strictness = s.strictness,
-                restTokensPerWeek = if (s.strictness == Strictness.STANDARD) s.restTokensPerWeek else 0,
+                restTokensPerWeek = restTokensToStore(s.strictness, s.restTokensPerWeek),
                 backfillDays = s.backfillDays,
                 dayBoundaryHour = s.dayBoundaryHour,
                 commitments = s.commitments.map { it.toNewCommitment() },
