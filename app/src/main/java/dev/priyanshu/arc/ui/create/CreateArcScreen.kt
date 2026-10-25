@@ -46,6 +46,8 @@ import dev.priyanshu.arc.domain.model.CommitmentType
 import dev.priyanshu.arc.domain.model.DayState
 import dev.priyanshu.arc.domain.model.ScheduleType
 import dev.priyanshu.arc.domain.model.Strictness
+import dev.priyanshu.arc.domain.rules.MAX_COMMITMENTS_PER_ARC
+import dev.priyanshu.arc.domain.rules.canAddCommitment
 import dev.priyanshu.arc.ui.components.DayDisc
 import dev.priyanshu.arc.ui.components.ReflectionField
 import dev.priyanshu.arc.ui.components.StreakCard
@@ -328,8 +330,6 @@ private fun Long.toLocalDateFromUtcMillis(): LocalDate = LocalDate.ofEpochDay(th
 // Step 2 — commitments
 // ---------------------------------------------------------------------------
 
-private const val MAX_COMMITMENTS = 10
-
 // "Reach 3,000 ml · Every day", "Tick off · Saturdays and Sundays".
 internal fun CommitmentDraft.detailText(): String {
     val what = when (type) {
@@ -384,7 +384,7 @@ private fun CommitmentsStep(state: CreateArcUiState, actions: CreateArcActions) 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("Commitments", style = MaterialTheme.typography.titleLarge, modifier = Modifier.alignByBaseline())
             Text(
-                "${state.commitments.size} of $MAX_COMMITMENTS",
+                "${state.commitments.size} of $MAX_COMMITMENTS_PER_ARC",
                 style = MaterialTheme.typography.labelLarge,
                 color = StreakTheme.colors.inkMuted,
                 modifier = Modifier.alignByBaseline(),
@@ -410,7 +410,7 @@ private fun CommitmentsStep(state: CreateArcUiState, actions: CreateArcActions) 
             }
         }
 
-        if (state.commitments.size < MAX_COMMITMENTS) {
+        if (canAddCommitment(state.commitments.size)) {
             DashedAddButton("Add a commitment", onClick = actions.onAddCommitment)
         } else {
             Text(
@@ -804,7 +804,7 @@ private fun ReviewStepPreview() {
     val today = LocalDate.of(2026, 10, 22)
     val state = CreateArcUiState(
         step = CreateArcStep.REVIEW,
-        today = today,
+        now = today.atTime(10, 0),
         name = "Winter Arc",
         startDate = today,
         endDate = today.plusDays(59),

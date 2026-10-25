@@ -103,8 +103,10 @@ object RulesEngine {
 /**
  * R1 — the current date ("today"). Derived from the local wall-clock time and
  * the arc's day-boundary hour: before the boundary hour, it's still yesterday.
+ * Public so :app can apply R1 outside resolve() — R16 uses it while creating
+ * an arc, with the boundary hour the new arc will have.
  */
-internal fun effectiveToday(now: LocalDateTime, boundaryHour: Int): LocalDate =
+fun effectiveToday(now: LocalDateTime, boundaryHour: Int): LocalDate =
     if (now.hour < boundaryHour) now.toLocalDate().minusDays(1) else now.toLocalDate()
 
 /** R2 — whether a date falls within the arc's start and end dates, inclusive at both ends. */
@@ -325,10 +327,17 @@ internal fun resolveArcStatus(arc: Arc, today: LocalDate, failedOnDate: LocalDat
 
 /**
  * R2 — the inclusive day count from the arc's start date to its end date. A
- * 2026-01-01 → 2026-01-05 arc is 5 days, not 4 — `ChronoUnit.DAYS.between` is
- * exclusive of the end date, hence the `+ 1`.
+ * 2026-01-01 → 2026-01-05 arc is 5 days, not 4.
  */
-internal fun totalDays(arc: Arc): Int = ChronoUnit.DAYS.between(arc.startDate, arc.endDate).toInt() + 1
+fun totalDays(arc: Arc): Int = totalDays(arc.startDate, arc.endDate)
+
+/**
+ * R2 — the same inclusive day count, from the two dates alone. For callers
+ * that have dates but no [Arc] yet, like the create flow in :app.
+ * `ChronoUnit.DAYS.between` is exclusive of the end date, hence the `+ 1`.
+ */
+fun totalDays(startDate: LocalDate, endDate: LocalDate): Int =
+    ChronoUnit.DAYS.between(startDate, endDate).toInt() + 1
 
 /**
  * R2 — how far into the arc `today` is: the count of [elapsedDates]. `0`

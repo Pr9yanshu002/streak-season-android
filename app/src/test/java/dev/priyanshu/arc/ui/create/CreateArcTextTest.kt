@@ -91,7 +91,7 @@ class CreateArcTextTest {
 
     // Piece 8 — the review cards.
     private val today = LocalDate.of(2026, 10, 22) // a Thursday
-    private val base = CreateArcUiState(today = today, startDate = today, endDate = today.plusDays(59))
+    private val base = CreateArcUiState(now = today.atTime(10, 0), startDate = today, endDate = today.plusDays(59))
 
     @Test
     fun `starts text says starts today when the arc starts today`() {

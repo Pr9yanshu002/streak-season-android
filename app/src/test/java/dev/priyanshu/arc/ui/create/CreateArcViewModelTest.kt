@@ -101,6 +101,43 @@ class CreateArcViewModelTest {
         assertNotNull(viewModel.state.value.strictnessError)
     }
 
+    // Task 20 — R16 with R1: "today" while creating follows the new arc's own
+    // boundary hour, so before that hour it is still the previous day.
+    private fun viewModelAt(time: LocalDateTime): CreateArcViewModel {
+        val clock = FakeClock(time)
+        val repository = ArcRepository(
+            database.arcDao(),
+            database.commitmentDao(),
+            database.dayDao(),
+            database.entryDao(),
+            database.milestoneDao(),
+            clock,
+        )
+        return CreateArcViewModel(repository, clock)
+    }
+
+    @Test
+    fun `at 02-00 with boundary 4, today is the previous day and backfill counts from it`() {
+        val early = viewModelAt(LocalDateTime.of(today, LocalTime.of(2, 0)))
+        val yesterday = today.minusDays(1)
+        assertEquals(yesterday, early.state.value.today)
+        assertEquals(yesterday, early.state.value.startDate) // the default start is today
+
+        early.setStartDate(yesterday.minusDays(2)) // backfill 2 from the effective today
+        assertNull(early.state.value.startDateError)
+    }
+
+    @Test
+    fun `moving the boundary from 4 to 0 at 02-00 moves today forward a day`() {
+        val early = viewModelAt(LocalDateTime.of(today, LocalTime.of(2, 0)))
+        early.setStartDate(today.minusDays(3)) // valid: two days before the effective today
+        assertNull(early.state.value.strictnessError)
+
+        early.setDayBoundaryHour(0)
+        assertEquals(today, early.state.value.today)
+        assertNotNull(early.state.value.strictnessError)
+    }
+
     @Test
     fun `blank name is invalid`() {
         viewModel.setName("   ")
