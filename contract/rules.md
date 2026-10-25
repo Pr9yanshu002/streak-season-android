@@ -348,6 +348,15 @@ could still check in for.
 
 `start_date` may be in the future. Before the arc starts, `dayNumber` is 0 (R2).
 
+"Today" here is `effectiveToday(now, day_boundary_hour)` (R1), using the
+boundary hour **the new arc will have**, not a fixed 4. Changing the boundary
+while creating the arc can move today, and so the earliest start, by one day.
+
+Worked example, boundary = 4, `backfill_days` = 2:
+| Local now          | effectiveToday | Earliest start |
+|--------------------|----------------|----------------|
+| 2026-01-15 02:30   | 2026-01-14     | 2026-01-12     |
+
 ---
 
 ## R17 — Arc name
@@ -399,6 +408,31 @@ was scheduled and active:
 
 Soft-deleted entries never count. Commitments removed mid-arc are included,
 over the days they were active.
+
+---
+
+## R20 — A valid commitment
+
+A commitment can be created when **all** of:
+
+1. `name` contains at least one non-whitespace character
+2. for `counter` and `duration`: `target_value` > 0 **and** `unit` is
+   non-blank
+3. for `binary` and `log`: `target_value` is null
+4. for `schedule_type = 'weekdays'`: `schedule_days` holds at least one day,
+   and each day is in 1–7 (Mon = 1 … Sun = 7)
+
+A counter or duration with no target can never be satisfied (R4), and a
+weekdays commitment with no days is never scheduled (R3).
+
+---
+
+## R21 — Creation limits
+
+- `rest_tokens_per_week` is 0–7. A week has seven days, so more could never be
+  used (R6). Strict and chill arcs store 0: R6 already treats their allowance
+  as 0, and the stored value says the same.
+- An arc has at most **10** commitments when it is created.
 
 
 ## Reference: state machine
