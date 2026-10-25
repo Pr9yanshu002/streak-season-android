@@ -149,6 +149,7 @@ data class CreateArcUiState(
                 .any { it.value > 1 }
             return if (duplicated) "Two or more commitments share a name. That's allowed, but worth checking." else null
         }
+
     // Changing backfill_days on the strictness step can make an already-chosen
     // start date too early (R16). Same isValidStartDate check step 1 uses.
     val strictnessError: String?
@@ -158,7 +159,7 @@ data class CreateArcUiState(
         CreateArcStep.NAME_AND_DATES -> step1Error
         CreateArcStep.COMMITMENTS -> step2Error
         CreateArcStep.STRICTNESS -> strictnessError
-        CreateArcStep.REVIEW , CreateArcStep.INTENTION -> null
+        CreateArcStep.INTENTION, CreateArcStep.REVIEW -> null
     }
 
     // Whether the open editor holds a commitment already in the list (Edit),
@@ -219,9 +220,6 @@ class CreateArcViewModel(
     fun setEndDate(date: LocalDate) = _state.update { it.copy(endDate = date) }
 
     fun pickQuickDuration(days: Int) = _state.update { it.copy(endDate = it.startDate.plusDays((days - 1).toLong())) }
-
-    fun removeCommitment(localId: String) =
-        _state.update { it.copy(commitments = it.commitments.filterNot { c -> c.localId == localId }) }
 
     fun setStrictness(strictness: Strictness) = _state.update { it.copy(strictness = strictness) }
 
@@ -324,7 +322,8 @@ class CreateArcViewModel(
     }
 
     // Saves a finished draft in one call, without opening the editor. Same
-    // checks as saveEditing(): an incomplete draft is ignored.
+    // checks as saveEditing(): an incomplete draft is ignored. The screen goes
+    // through the editor; this is the shortcut tests use to fill the list.
     fun saveCommitment(draft: CommitmentDraft) = _state.update {
         if (draft.error != null) return@update it
         it.copy(commitments = it.commitments.withSaved(draft.cleaned()))

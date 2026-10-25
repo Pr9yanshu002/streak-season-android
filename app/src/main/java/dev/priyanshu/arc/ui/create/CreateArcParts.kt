@@ -51,7 +51,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import dev.priyanshu.arc.R
 import dev.priyanshu.arc.ui.components.LargeButton
@@ -70,7 +70,7 @@ fun StepHeader(
     currentStep: Int,
     totalSteps: Int,
     onClose: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Row(
         modifier = modifier
@@ -136,13 +136,13 @@ fun StepBottomBar(
     modifier: Modifier = Modifier,
     backText: String = "Back",
 ) {
-    Column(
-        modifier.fillMaxWidth()
-    ) {
+    Column(modifier.fillMaxWidth()) {
         HorizontalDivider()
         Row(
-            modifier = Modifier.fillMaxWidth().padding(start = Space.s6, end = Space.s6, top = Space.s4, bottom = Space.s6),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = Space.s6, end = Space.s6, top = Space.s4, bottom = Space.s6),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (onBack != null) {
                 LargeButton(text = backText, onClick = onBack, filled = false, modifier = Modifier.width(112.dp))
@@ -400,7 +400,7 @@ fun DayPicker(
     val colors = StreakTheme.colors
     val locale = Locale.getDefault()
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        DayOfWeek.values().forEach { day ->
+        DayOfWeek.entries.forEach { day ->
             val iso = day.value
             val on = iso in selectedDays
             Box(
@@ -574,6 +574,7 @@ fun StepperRow(
     }
 }
 
+// A card whose body shows only after its header is tapped ("Advanced").
 @Composable
 fun ExpandableSection(
     title: String,
@@ -616,6 +617,8 @@ fun ExpandableSection(
     }
 }
 
+// One summary card on Review: a title, an Edit button that jumps to the
+// step it came from, and the summary under them.
 @Composable
 fun ReviewCard(
     title: String,
@@ -624,21 +627,15 @@ fun ReviewCard(
     titleStyle: TextStyle = MaterialTheme.typography.titleLarge,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    SectionCard(
-        modifier
-    ) {
-        Column(
-            Modifier.padding(Space.s4), verticalArrangement = Arrangement.spacedBy(Space.s1),
-        ){
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ){
-                Text(title,style = titleStyle, modifier = Modifier.weight(1f))
+    SectionCard(modifier) {
+        Column(Modifier.padding(Space.s4), verticalArrangement = Arrangement.spacedBy(Space.s1)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, style = titleStyle, modifier = Modifier.weight(1f))
                 TextButton(
                     onClick = onEdit,
                     // Four "Edit" buttons on one screen: TalkBack needs to know which is which.
                     modifier = Modifier.semantics { contentDescription = "Edit $title" },
-                ){
+                ) {
                     Text("Edit", style = MaterialTheme.typography.labelLarge, color = StreakTheme.colors.evergreen)
                 }
             }
@@ -647,8 +644,7 @@ fun ReviewCard(
     }
 }
 
-@Preview(name = "Commitment list · light")
-@Preview(name = "Commitment list · dark", uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
+@PreviewLightDark
 @Composable
 private fun CommitmentListPreview() {
     PreviewFrame {
@@ -660,8 +656,7 @@ private fun CommitmentListPreview() {
     }
 }
 
-@Preview(name = "Header and intro · light")
-@Preview(name = "Header and intro · dark", uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
+@PreviewLightDark
 @Composable
 private fun StepHeaderPreview() {
     PreviewFrame {
@@ -675,8 +670,7 @@ private fun StepHeaderPreview() {
     }
 }
 
-@Preview(name = "Fields · light")
-@Preview(name = "Fields · dark", uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
+@PreviewLightDark
 @Composable
 private fun FieldsPreview() {
     PreviewFrame {
@@ -696,8 +690,7 @@ private fun FieldsPreview() {
     }
 }
 
-@Preview(name = "Editor pieces · light")
-@Preview(name = "Editor pieces · dark", uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
+@PreviewLightDark
 @Composable
 private fun EditorPiecesPreview() {
     PreviewFrame {
@@ -719,6 +712,60 @@ private fun EditorPiecesPreview() {
                 showRadio = true,
             )
             DayPicker(selectedDays = setOf(6, 7), onToggle = {})
+        }
+    }
+}
+
+@PreviewLightDark
+@Composable
+private fun StepBottomBarPreview() {
+    PreviewFrame {
+        StepBottomBar(primaryText = "Next", onPrimary = {}, onBack = null)
+        StepBottomBar(primaryText = "Begin Winter Arc", onPrimary = {}, onBack = {})
+    }
+}
+
+@PreviewLightDark
+@Composable
+private fun SettingsPreview() {
+    PreviewFrame {
+        Column(verticalArrangement = Arrangement.spacedBy(Space.s4)) {
+            SectionCard {
+                StepperRow(
+                    title = "Rest days",
+                    subtitle = "1 a week · your streak carries on",
+                    onDecrease = {},
+                    onIncrease = {},
+                    decreaseLabel = "One fewer rest day a week",
+                    increaseLabel = "One more rest day a week",
+                )
+            }
+            ExpandableSection(title = "Advanced", expanded = true, onToggle = {}) {
+                StepperRow(
+                    title = "Day starts at 4:00 AM",
+                    subtitle = "Late nights count as the day before.",
+                    onDecrease = {},
+                    onIncrease = {},
+                    decreaseLabel = "Start the day an hour earlier",
+                    increaseLabel = "Start the day an hour later",
+                )
+            }
+            ExpandableSection(title = "Advanced", expanded = false, onToggle = {}) {}
+        }
+    }
+}
+
+@PreviewLightDark
+@Composable
+private fun ReviewCardPreview() {
+    PreviewFrame {
+        ReviewCard(title = "Winter Arc", onEdit = {}) {
+            Text("60 days · starts today", style = MaterialTheme.typography.bodyLarge)
+            Text(
+                "Thu 22 Oct – Sun 20 Dec 2026",
+                style = MaterialTheme.typography.bodySmall,
+                color = StreakTheme.colors.inkMuted,
+            )
         }
     }
 }

@@ -171,14 +171,17 @@ The Today redesign (`docs/tasks/18-today-redesign.md`, designs in
 commitment cards, `RestDayCard`, `ProgressPie`, `ReflectionField`,
 `LargeButton`).
 
-The create-arc redesign (task 19) is in progress. The flow has five steps
-(name and dates, commitments, strictness, intention, review); Next is always
+The create-arc redesign (task 19) is done. The flow has five steps (name
+and dates, commitments, strictness, intention, review); Next is always
 enabled and a blocked Next shows that step's errors (`showErrors`). The
-create flow's own parts (`StepHeader`, `StepIntro`, `StepBottomBar`, the
-field parts) are in `ui/create/CreateArcParts.kt`. The name-and-dates step
-is rebuilt; the commitment editor's state is in the ViewModel
-(`CommitmentDraft.targetText`, `editing`) but the screen still uses the old
-dialog. See `docs/implementationSessions/task-19-report.md`.
+commitment editor is a full-screen view driven by the ViewModel's `editing`
+state, and Review's Edit buttons jump back with `goToStep`. The create
+flow's own parts (`StepHeader`, `StepBottomBar`, the field parts,
+`OptionCard`, `DayPicker`, `StepperRow`, `ReviewCard`…) are in
+`ui/create/CreateArcParts.kt`; shared date/day words are in
+`ui/create/CreateArcText.kt`. App-only limits (10 commitments, 7 rest days)
+and known issues are in `docs/implementationSessions/task-19-notes.md`; see
+also `task-19-report.md`.
 
 Remaining Compose work is whatever comes next (see `docs/tasks/` for the next
 brief).

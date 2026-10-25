@@ -1,14 +1,13 @@
 # Task 19 — Create-arc redesign: report
 
-Pieces 1–6a on `task-19-create-arc-redesign`. Priyanshu wrote each piece by
+Pieces 1–8 on `task-19-create-arc-redesign` (merged as PR #9). Priyanshu wrote each piece by
 hand; Claude reviewed it, fixed what was agreed and wrote the tests. There is
 no brief in `docs/tasks/` and no design folder for the create flow
 (`docs/design/` has only `today/`), so the pieces were checked against the
 behaviour Priyanshu described, not against a design.
 
-Behaviour that is still old: the commitments step uses the old dialog, and
-the strictness, intention and review steps keep their old layouts. Piece 6-b
-(wiring the new editor into the screen) and later pieces are not in this PR.
+Every step of the flow is rebuilt. The follow-up fixes from the whole-branch
+review are on `task-19b-create-arc-review-fixes`.
 
 ## Pieces 1–2 — five steps, errors shown on Next
 
@@ -88,32 +87,64 @@ the strictness, intention and review steps keep their old layouts. Piece 6-b
   - The screen was updated just enough to compile (the dialog and summary
     use `targetText`; the dialog rejects a non-finite target).
 
+## Pieces 6b-2 and 6c — commitment editor and list
+
+- The old dialog is gone. The editor is full screen, driven by the
+  ViewModel's `editing` state: kind cards, target and unit, required/bonus,
+  every day or some days with a day picker. The phone's back gesture closes
+  it. New parts: `EditorTopBar`, `SegmentedControl`, `OptionCard`,
+  `DayPicker`.
+- The commitments step lists each commitment as a card ("Reach 3,000 ml ·
+  Every day", Required/Bonus chip) that opens the editor, with an "N of 10"
+  count and a dashed add button. New parts: `RequirementChip`,
+  `CommitmentListCard`, `DashedAddButton`.
+- Review fixes by Claude: a target typed with the phone's decimal comma is
+  accepted (`parseAmount`), and text that isn't a number gets its own
+  message; the day-picker hint for all seven days no longer says "On other
+  days".
+
+## Piece 7 — strictness step
+
+- Strict, standard and chill are `OptionCard`s. Standard shows a rest-days
+  stepper; day start and backfill sit in an Advanced section that opens on
+  its own when a remix brings non-default values. New parts: `SectionCard`,
+  `StepperRow`, `ExpandableSection`.
+- `begin()` stores 0 rest tokens for strict and chill arcs (R6).
+- Review fixes by Claude: hints stay true at 0, the day-start time follows
+  the 12/24-hour setting, rest days capped at 7 (also on remix), stepper
+  changes announced by TalkBack, `DEFAULT_DAY_BOUNDARY_HOUR` /
+  `DEFAULT_BACKFILL_DAYS`.
+
+## Piece 8 — intention and review steps
+
+- Intention uses `ReflectionField`. Review is a column of `ReviewCard`s
+  (name and dates, commitments, strictness, intention); each Edit jumps to
+  its step (`goToStep`).
+- Review fixes by Claude: space between the cards, "only today can be
+  filled in" for a backfill of 0, "starts today".
+
 ## Not in `rules.md` (create-flow checks in `:app` only)
 
-Only R16–R18 come from `:domain`. These are UI-level and unchanged in
-substance by this task: end date not before the start date, at most 10
-commitments, counter/duration need a target above 0 and a unit, a weekdays
-schedule needs a day.
+Only R15–R18 come from `:domain` or `rules.md`. The app-only limits are
+listed in `task-19-notes.md`: at most 10 commitments, at most 7 rest days a
+week, end date not before the start date, counter/duration need a target
+above 0 and a unit, a weekdays schedule needs a day.
 
 ## Open items
 
-- Review notes not acted on yet: filled Material icons vs the design
-  system's stroke glyphs (`StrokeGlyph`); colours read from
-  `StreakTheme.colors` where the components use `MaterialTheme.colorScheme`;
-  raw dp values (`12.dp`, `6.dp`, `10.dp`, `14.dp`); two `@Preview`s instead
-  of `@PreviewLightDark`; unused imports (`Button`,
-  `CircularProgressIndicator`, `isSystemInDarkTheme`, `Canvas`, `Offset`,
-  `StrokeCap`); the start hint reads "up to 1 days back" / "up to 0 days
-  back"; no `StepBottomBar` preview; no `imePadding()`, so the keyboard can
-  cover the bottom bar.
-- Still from before this task: rest tokens are stored for strict and chill
-  arcs (`schema.sql` says 0 in strict); R16 uses the calendar date, not
-  `effectiveToday`; `isSubmitting` stays true if `createArc` throws.
+- Filled Material icons instead of the design system's stroke glyphs
+  (`StrokeGlyph`); colours read from `StreakTheme.colors` where the
+  components use `MaterialTheme.colorScheme`; raw dp values.
+- From the whole-branch review, not fixed yet: rule logic re-derived in
+  `:app` (R1 `effectiveToday` and R2 `totalDays` are `internal` in
+  `:domain`), text-style overrides, and the accessibility gaps. The known
+  issues (`isSubmitting` after an exception, remix pre-fill overwriting
+  early edits, the draft lost on process death) are in `task-19-notes.md`.
 - Not checked on the emulator by Claude.
 
 ## Tests
 
-`./gradlew :app:testDebugUnitTest`: 86/86. `./gradlew :domain:test`: 161/161.
+`./gradlew :app:testDebugUnitTest`: 115/115. `./gradlew :domain:test`: 161/161.
 
 New or changed:
 - `CreateArcViewModelTest`: `step3Error` → `strictnessError`; blocked Next
@@ -124,4 +155,10 @@ New or changed:
   unknown id, step change closes it); `saveCommitment` checks; remix keeps a
   fractional target.
 - `CreateArcStepTest` (new): step numbering.
-- `CommitmentDraftTest` (new): `error`, NaN/Infinity, decimals, `cleaned()`.
+- `CommitmentDraftTest` (new): `error`, NaN/Infinity, decimals, `cleaned()`,
+  comma decimals (`parseAmount`).
+- `CreateArcViewModelTest` (pieces 6b-2 to 8): editor flows through
+  `updateEditing`, rest-day clamp and strictness switching, rest tokens
+  stored per strictness, `goToStep`.
+- `CreateArcTextTest` (new): `scheduleHint`, `detailText`, the strictness
+  descriptions, `startsText`, `backfillText`, `restDaysText`.
