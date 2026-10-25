@@ -391,14 +391,18 @@ definitions.
 
 **Best streak.** R11's `bestStreak`, restricted to the recap period.
 
+**Best streak run.** The dates behind the best streak: its first date, its
+last date, and the rest days inside it. If several runs share the longest
+length, the earliest one. If the best streak is 0, there is no run.
+
 **Hardest week.** The ISO week (same week keys as R6) with the lowest ratio of
 complete days to counted days, among weeks with **at least 3 counted days** in
 the recap period. Weeks with fewer are excluded — a two-day edge week where one
 day was missed would otherwise dominate. Ties go to the earliest week. If no
-week qualifies, there is no hardest week.  
-The week's **first and last dates inside the recap period** are reported with
-it: an ISO week can start before `start_date` or end after the period, and
-those outside days were never part of the arc.
+week qualifies, there is no hardest week. The week's **first and last dates
+inside the recap period** are reported with it: an ISO week can start before
+`start_date` or end after the period, and those outside days were never part
+of the arc.
 
 **Per-commitment totals**, over days in the recap period where the commitment
 was scheduled and active:
@@ -408,9 +412,9 @@ was scheduled and active:
   the target was met.
 - `log` — the first and last recorded values, by date, and the number of days a
   value was recorded. No pass or fail.
-  **Best streak run.** The dates behind the best streak: its first date, its
-  last date, and the rest days inside it. If several runs share the longest
-  length, the earliest one. If the best streak is 0, there is no run.
+
+Soft-deleted entries never count. Commitments removed mid-arc are included,
+over the days they were active.
 
 **Season breakdown.** Over the recap period:
 
@@ -428,8 +432,6 @@ re-resolving them.
 
 **Failure.** For a failed arc, `failed_on_date` (R9) and that day's state,
 `partial` or `missed`.
-Soft-deleted entries never count. Commitments removed mid-arc are included,
-over the days they were active.
 
 ---
 
