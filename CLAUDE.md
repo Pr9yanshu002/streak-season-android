@@ -166,9 +166,19 @@ not fixed): repository writes don't check sealing, and with `backfill_days = 0`
 a Today screen left open across the day boundary can write to a sealed date.
 
 The Today redesign (`docs/tasks/18-today-redesign.md`, designs in
-`docs/design/today/`) is in progress. Reusable, stateless pieces live in
+`docs/design/today/`) is done. Reusable, stateless pieces live in
 `ui/components/` (`DayDisc`, `WeekStrip`, `StreakPill`, `BonusChip`, the
-commitment cards, `RestDayCard`).
+commitment cards, `RestDayCard`, `ProgressPie`, `ReflectionField`,
+`LargeButton`).
+
+The create-arc redesign (task 19) is in progress. The flow has five steps
+(name and dates, commitments, strictness, intention, review); Next is always
+enabled and a blocked Next shows that step's errors (`showErrors`). The
+create flow's own parts (`StepHeader`, `StepIntro`, `StepBottomBar`, the
+field parts) are in `ui/create/CreateArcParts.kt`. The name-and-dates step
+is rebuilt; the commitment editor's state is in the ViewModel
+(`CommitmentDraft.targetText`, `editing`) but the screen still uses the old
+dialog. See `docs/implementationSessions/task-19-report.md`.
 
 Remaining Compose work is whatever comes next (see `docs/tasks/` for the next
 brief).
