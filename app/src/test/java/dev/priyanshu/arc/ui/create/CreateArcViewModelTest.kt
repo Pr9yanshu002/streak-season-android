@@ -216,6 +216,43 @@ class CreateArcViewModelTest {
         assertEquals(CreateArcStep.INTENTION, viewModel.state.value.step)
     }
 
+    // Piece 8 — Edit on a review card jumps straight to that step.
+    @Test
+    fun `goToStep jumps from REVIEW to the chosen step and next walks back`() {
+        viewModel.setName("My Arc")
+        viewModel.saveCommitment(CommitmentDraft(name = "Meditate", isRequired = true))
+        repeat(4) { viewModel.next() }
+        assertEquals(CreateArcStep.REVIEW, viewModel.state.value.step)
+
+        viewModel.goToStep(CreateArcStep.COMMITMENTS)
+        assertEquals(CreateArcStep.COMMITMENTS, viewModel.state.value.step)
+
+        repeat(3) { viewModel.next() }
+        assertEquals(CreateArcStep.REVIEW, viewModel.state.value.step)
+    }
+
+    @Test
+    fun `goToStep clears showErrors`() {
+        viewModel.next() // blank name: blocked, errors on
+        assertTrue(viewModel.state.value.showErrors)
+        viewModel.goToStep(CreateArcStep.NAME_AND_DATES)
+        assertFalse(viewModel.state.value.showErrors)
+    }
+
+    @Test
+    fun `goToStep keeps everything entered so far`() {
+        viewModel.setName("My Arc")
+        viewModel.saveCommitment(CommitmentDraft(name = "Meditate", isRequired = true))
+        viewModel.setIntention("Feel stronger")
+        repeat(4) { viewModel.next() }
+
+        viewModel.goToStep(CreateArcStep.NAME_AND_DATES)
+        val state = viewModel.state.value
+        assertEquals("My Arc", state.name)
+        assertEquals(listOf("Meditate"), state.commitments.map { it.name })
+        assertEquals("Feel stronger", state.intention)
+    }
+
     @Test
     fun `back resets showErrors`() {
         viewModel.setName("My Arc")

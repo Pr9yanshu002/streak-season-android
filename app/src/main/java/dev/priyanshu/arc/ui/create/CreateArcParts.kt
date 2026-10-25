@@ -26,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,6 +47,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -609,6 +611,37 @@ fun ExpandableSection(
         }
         if (expanded) {
             HorizontalDivider(color = StreakTheme.colors.line)
+            content()
+        }
+    }
+}
+
+@Composable
+fun ReviewCard(
+    title: String,
+    onEdit: () -> Unit,
+    modifier: Modifier = Modifier,
+    titleStyle: TextStyle = MaterialTheme.typography.titleLarge,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    SectionCard(
+        modifier
+    ) {
+        Column(
+            Modifier.padding(Space.s4), verticalArrangement = Arrangement.spacedBy(Space.s1),
+        ){
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ){
+                Text(title,style = titleStyle, modifier = Modifier.weight(1f))
+                TextButton(
+                    onClick = onEdit,
+                    // Four "Edit" buttons on one screen: TalkBack needs to know which is which.
+                    modifier = Modifier.semantics { contentDescription = "Edit $title" },
+                ){
+                    Text("Edit", style = MaterialTheme.typography.labelLarge, color = StreakTheme.colors.evergreen)
+                }
+            }
             content()
         }
     }

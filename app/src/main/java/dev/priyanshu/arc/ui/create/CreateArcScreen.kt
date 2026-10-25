@@ -2,6 +2,7 @@ package dev.priyanshu.arc.ui.create
 
 import android.text.format.DateFormat
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -34,7 +35,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -43,6 +46,7 @@ import dev.priyanshu.arc.domain.model.DayState
 import dev.priyanshu.arc.domain.model.ScheduleType
 import dev.priyanshu.arc.domain.model.Strictness
 import dev.priyanshu.arc.ui.components.DayDisc
+import dev.priyanshu.arc.ui.components.ReflectionField
 import dev.priyanshu.arc.ui.components.StreakCard
 import dev.priyanshu.arc.ui.components.formatAmount
 import dev.priyanshu.arc.ui.theme.Space
@@ -97,6 +101,7 @@ fun CreateArcRoute(
             onNext = viewModel::next,
             onBegin = { viewModel.begin(onCreated) },
             onCancel = onCancel,
+            onGoToStep = viewModel::goToStep,
         ),
         modifier = modifier,
     )
@@ -122,6 +127,7 @@ class CreateArcActions(
     val onNext: () -> Unit,
     val onBegin: () -> Unit,
     val onCancel: () -> Unit,
+    val onGoToStep: (CreateArcStep) -> Unit,
 )
 
 @Composable
@@ -162,7 +168,7 @@ fun CreateArcScreen(state: CreateArcUiState, actions: CreateArcActions, modifier
                 CreateArcStep.COMMITMENTS -> CommitmentsStep(state, actions)
                 CreateArcStep.STRICTNESS -> StrictnessStep(state, actions)
                 CreateArcStep.INTENTION -> IntentionStep(state, actions)
-                CreateArcStep.REVIEW -> ReviewStep(state)
+                CreateArcStep.REVIEW -> ReviewStep(state, actions)
             }
         }
         StepBottomBar(
@@ -653,11 +659,11 @@ private fun StrictnessStep(state: CreateArcUiState, actions: CreateArcActions) {
 
 @Composable
 private fun IntentionStep(state: CreateArcUiState, actions: CreateArcActions) {
-    OutlinedTextField(
+    ReflectionField(
         value = state.intention,
         onValueChange = actions.onIntentionChange,
-        label = { Text("Intention (optional)") },
-        modifier = Modifier.fillMaxWidth(),
+        label = "You wrote",
+        helper = "Skip it if nothing comes to mind.",
     )
 }
 
@@ -666,30 +672,64 @@ private fun IntentionStep(state: CreateArcUiState, actions: CreateArcActions) {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun ReviewStep(state: CreateArcUiState) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(state.name, style = MaterialTheme.typography.headlineSmall)
-        Text("${state.startDate} → ${state.endDate}")
-        Text(state.strictness.name.lowercase().replaceFirstChar { it.uppercase() })
-        if (state.strictness == Strictness.STANDARD) {
-            Text("${state.restTokensPerWeek} rest token(s) per week")
-        }
-        Text("Day boundary hour: ${state.dayBoundaryHour}, backfill: ${state.backfillDays} day(s)")
-        if (state.intention.isNotBlank()) {
-            Text("\"${state.intention}\"", style = MaterialTheme.typography.bodyMedium)
-        }
-
-        Spacer(Modifier.height(8.dp))
-        Text("Commitments", style = MaterialTheme.typography.labelLarge)
-        state.commitments.forEach { commitment ->
-            Text("• ${commitment.name} — ${commitment.summary()}")
-        }
-
-        if (state.activeArcExistsError) {
-            Spacer(Modifier.height(8.dp))
+private fun ReviewStep(state: CreateArcUiState, actions:CreateArcActions) {
+    Column(verticalArrangement = Arrangement.spacedBy(Space.s4)) {
+        ReviewCard(title = state.name.trim(), onEdit = { actions.onGoToStep(CreateArcStep.NAME_AND_DATES) }) {
+            Text("${state.lengthInDays} days · ${state.startsText()}", style = MaterialTheme.typography.bodyLarge)
             Text(
-                "You already have an active arc. Finish, fail, or archive it before starting a new one.",
-                color = MaterialTheme.colorScheme.error,
+                "${state.startDate.shortText()} – ${state.endDate.fullText()}",
+                style = MaterialTheme.typography.bodySmall,
+                color = StreakTheme.colors.inkMuted,
+            )
+        }
+
+        val count = state.commitments.size
+        ReviewCard(title = if (count==1) "1 commitment" else "$count commitments", onEdit = {actions.onGoToStep(
+            CreateArcStep.COMMITMENTS)}) {
+            Column(Modifier.padding(top = Space.s2), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                state.commitments.forEach { commitment ->
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
+                        Column(Modifier.weight(1f)) {
+                            Text(commitment.name, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                commitment.detailText(),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = StreakTheme.colors.inkMuted,
+                            )
+                        }
+                        RequirementChip(commitment.isRequired)
+                    }
+                }
+            }
+        }
+
+        ReviewCard(title = state.strictness.title(), onEdit = {actions.onGoToStep(CreateArcStep.STRICTNESS)}) {
+            if (state.strictness == Strictness.STANDARD) {
+                Text(state.restDaysText(), style = MaterialTheme.typography.bodyLarge)
+            }
+            Text(
+                "Day starts at ${hourText(state.dayBoundaryHour)} · ${state.backfillText()}",
+                style = MaterialTheme.typography.bodySmall,
+                color = StreakTheme.colors.inkMuted,
+            )
+        }
+
+        if (state.intention.isNotBlank()){
+            ReviewCard(title = "You wrote", onEdit = {actions.onGoToStep(CreateArcStep.INTENTION)}, titleStyle = MaterialTheme.typography.labelLarge,) {
+                Text(state.intention.trim(),style = StreakTheme.type.voice)
+            }
+        }
+
+        // R15: reachable only if an arc became active while this flow was open.
+        if (state.activeArcExistsError) {
+            Text(
+                "You already have an active arc. Finish it before starting a new one.",
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(MaterialTheme.shapes.small)
+                    .background(StreakTheme.colors.larchSoft)
+                    .padding(Space.s4),
             )
         }
     }
@@ -711,4 +751,20 @@ private fun CreateArcStep.text(): StepText = when (this) {
         "One line, in your own words. You'll see it before day 1, and again in your recap.",
     )
     CreateArcStep.REVIEW -> StepText("Ready to begin?")
+}
+
+internal fun CreateArcUiState.startsText() : String = when {
+    startDate == today -> "starts today"
+    startDate.isAfter(today) -> "starts ${startDate.shortText()}"
+    else -> "began ${startDate.shortText()}"
+}
+
+// Same words as the backfill row on the strictness step, in lower case.
+internal fun CreateArcUiState.backfillText(): String =
+    if (backfillDays == 0) "only today can be filled in" else "fill in up to ${daysText(backfillDays)} back"
+
+internal fun CreateArcUiState.restDaysText() : String = when (restTokensPerWeek) {
+    0 -> "No rest days"
+    1 -> "1 rest day a week"
+    else -> "$restTokensPerWeek rest days a week"
 }

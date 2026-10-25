@@ -329,6 +329,8 @@ class CreateArcViewModel(
         if (draft.error != null) return@update it
         it.copy(commitments = it.commitments.withSaved(draft.cleaned()))
     }
+
+    fun goToStep(step: CreateArcStep) = _state.update { it.copy(step = step, showErrors = false) }
 }
 
 // A typed amount as a number. "2.5" always works. A comma is read as the

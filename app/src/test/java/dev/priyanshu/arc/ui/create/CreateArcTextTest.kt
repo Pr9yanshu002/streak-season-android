@@ -3,6 +3,7 @@ package dev.priyanshu.arc.ui.create
 import dev.priyanshu.arc.domain.model.CommitmentType
 import dev.priyanshu.arc.domain.model.ScheduleType
 import dev.priyanshu.arc.domain.model.Strictness
+import java.time.LocalDate
 import java.util.Locale
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -86,5 +87,34 @@ class CreateArcTextTest {
     fun `standard and chill descriptions don't depend on backfill`() {
         assertEquals(Strictness.STANDARD.description(0), Strictness.STANDARD.description(5))
         assertEquals(Strictness.CHILL.description(0), Strictness.CHILL.description(5))
+    }
+
+    // Piece 8 — the review cards.
+    private val today = LocalDate.of(2026, 10, 22) // a Thursday
+    private val base = CreateArcUiState(today = today, startDate = today, endDate = today.plusDays(59))
+
+    @Test
+    fun `starts text says starts today when the arc starts today`() {
+        assertEquals("starts today", base.startsText())
+    }
+
+    @Test
+    fun `starts text for a future and a past start`() {
+        assertEquals("starts Sat 24 Oct", base.copy(startDate = today.plusDays(2)).startsText())
+        assertEquals("began Tue 20 Oct", base.copy(startDate = today.minusDays(2)).startsText())
+    }
+
+    @Test
+    fun `backfill text on the review card`() {
+        assertEquals("only today can be filled in", base.copy(backfillDays = 0).backfillText())
+        assertEquals("fill in up to 1 day back", base.copy(backfillDays = 1).backfillText())
+        assertEquals("fill in up to 2 days back", base.backfillText())
+    }
+
+    @Test
+    fun `rest days text`() {
+        assertEquals("No rest days", base.copy(restTokensPerWeek = 0).restDaysText())
+        assertEquals("1 rest day a week", base.copy(restTokensPerWeek = 1).restDaysText())
+        assertEquals("3 rest days a week", base.copy(restTokensPerWeek = 3).restDaysText())
     }
 }
